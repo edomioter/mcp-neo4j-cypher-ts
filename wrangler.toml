@@ -1,0 +1,67 @@
+# MCP Neo4j Cypher Server - Cloudflare Workers Configuration
+name = "mcp-neo4j-cypher"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Development settings
+[dev]
+port = 8787
+local_protocol = "http"
+
+# Environment variables (non-sensitive)
+[vars]
+ENVIRONMENT = "development"
+DEFAULT_READ_TIMEOUT = "30"
+DEFAULT_TOKEN_LIMIT = "10000"
+DEFAULT_SCHEMA_SAMPLE = "1000"
+ALLOWED_ORIGINS = "https://claude.ai,https://www.claude.ai"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "mcp-neo4j-users"
+database_id = "placeholder-replace-with-actual-id"
+
+# KV Namespace binding
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-replace-with-actual-id"
+
+# ============================================
+# Staging Environment
+# ============================================
+[env.staging]
+name = "mcp-neo4j-cypher-staging"
+vars = { ENVIRONMENT = "staging" }
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "mcp-neo4j-users-staging"
+database_id = "placeholder-replace-with-actual-id"
+
+[[env.staging.kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-replace-with-actual-id"
+
+# ============================================
+# Production Environment
+# ============================================
+[env.production]
+name = "mcp-neo4j-cypher"
+vars = { ENVIRONMENT = "production" }
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "mcp-neo4j-users"
+database_id = "placeholder-replace-with-actual-id"
+
+[[env.production.kv_namespaces]]
+binding = "SESSIONS"
+id = "placeholder-replace-with-actual-id"
+
+# ============================================
+# Secrets (configure via wrangler secret put)
+# ============================================
+# ENCRYPTION_KEY - AES-256 key for encrypting Neo4j credentials
+# Run: openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
