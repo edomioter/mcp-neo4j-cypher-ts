@@ -660,12 +660,19 @@ El servidor original usa el **Bolt Protocol** mediante el driver oficial. En Clo
 - KV Namespace: `SESSIONS` (ID: `6273d16c007743598a144f6443872e7a`)
 - Worker: `mcp-neo4j-cypher-staging`
 
-#### 10.3 Deploy Producción (Pendiente)
-- [ ] Crear recursos D1 y KV de producción
-- [ ] Actualizar wrangler.toml con IDs de producción
-- [ ] Configurar secrets (ENCRYPTION_KEY)
-- [ ] Deploy final
-- [ ] Verificar funcionamiento con Claude.ai
+#### 10.3 Deploy Producción
+- [x] Crear recursos D1 y KV de producción
+- [x] Actualizar wrangler.toml con IDs de producción
+- [x] Configurar secrets (ENCRYPTION_KEY)
+- [x] Aplicar schema D1 a producción
+- [x] Deploy final (2025-12-23T22:31:00.000Z)
+- [x] Ejecutar smoke tests (37/37 pasados)
+
+**Recursos creados:**
+- D1 Database: `mcp-neo4j-users-prod` (ID: `40e22b7e-96ca-453d-9263-8fcfa61df034`)
+- KV Namespace: `SESSIONS` (ID: `dfd68ab532eb4ccb82289c310eb089af`)
+- Worker: `mcp-neo4j-cypher`
+- URL: `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev`
 
 #### 10.4 CI/CD (Pendiente)
 - [ ] GitHub Actions para tests
@@ -835,6 +842,7 @@ CREATE INDEX idx_connections_user_id ON connections(user_id);
 | 2025-12-23 | 9 | Fase 9: Seguridad y Hardening | Completado |
 | 2025-12-23 | 10 | Fase 10: Documentación | Completado |
 | 2025-12-23 | 10.2 | Deploy Staging a Cloudflare | Completado |
+| 2025-12-23 | 10.3 | Deploy Producción a Cloudflare | Completado |
 | | | | |
 
 ### Notas de Sesión
@@ -1106,8 +1114,23 @@ CREATE INDEX idx_connections_user_id ON connections(user_id);
     - Códigos de error
     - Ejemplos de queries Cypher
 - **Estado del proyecto:**
-  - Fases 1-10.2 (incluyendo Deploy Staging): Completadas
-  - Pendiente: Deploy producción, CI/CD
+  - Fases 1-10.3 (incluyendo Deploy Producción): Completadas
+  - Pendiente: CI/CD (GitHub Actions)
+
+#### Sesión 4 - 2025-12-23
+- **Actividad:** Deploy Producción a Cloudflare Workers
+- **Recursos creados:**
+  - D1 Database: `mcp-neo4j-users-prod` (ID: `40e22b7e-96ca-453d-9263-8fcfa61df034`)
+  - KV Namespace: `SESSIONS` (ID: `dfd68ab532eb4ccb82289c310eb089af`)
+- **Configuración:**
+  - Actualizado `wrangler.toml` con IDs de recursos producción
+  - Configurado `ENCRYPTION_KEY` como secret
+  - Aplicado schema D1 a base de datos producción
+- **Deploy realizado:** 2025-12-23T22:31:00.000Z
+- **Smoke tests:** 37/37 pasados
+- **Worker:** `mcp-neo4j-cypher`
+- **URL Producción:** `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev`
+- **Estado:** Producción completamente funcional
 
 #### Sesión 3 (continuación) - 2025-12-23
 - **Actividad:** Deploy Staging a Cloudflare Workers

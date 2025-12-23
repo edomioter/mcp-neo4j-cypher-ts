@@ -56,16 +56,22 @@ id = "6273d16c007743598a144f6443872e7a"
 # ============================================
 [env.production]
 name = "mcp-neo4j-cypher"
-vars = { ENVIRONMENT = "production" }
+
+[env.production.vars]
+ENVIRONMENT = "production"
+DEFAULT_READ_TIMEOUT = "30"
+DEFAULT_TOKEN_LIMIT = "10000"
+DEFAULT_SCHEMA_SAMPLE = "1000"
+ALLOWED_ORIGINS = "https://claude.ai,https://www.claude.ai"
 
 [[env.production.d1_databases]]
 binding = "DB"
-database_name = "mcp-neo4j-users"
-database_id = "placeholder-replace-with-actual-id"
+database_name = "mcp-neo4j-users-prod"
+database_id = "40e22b7e-96ca-453d-9263-8fcfa61df034"
 
 [[env.production.kv_namespaces]]
 binding = "SESSIONS"
-id = "placeholder-replace-with-actual-id"
+id = "dfd68ab532eb4ccb82289c310eb089af"
 
 # ============================================
 # Secrets (configure via wrangler secret put)
