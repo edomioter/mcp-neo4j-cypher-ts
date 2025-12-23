@@ -82,6 +82,7 @@ Now you can ask Claude things like:
 
 ## Documentation
 
+- **[User Guide](docs/USER-GUIDE.md)** - Complete guide for integrating with Claude.ai
 - [Deployment Guide](docs/DEPLOYMENT.md) - Detailed setup and configuration
 - [Security](docs/SECURITY.md) - Rate limiting, blocked queries, encryption
 - [API Reference](docs/API.md) - HTTP endpoints and MCP tools
