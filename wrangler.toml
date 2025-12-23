@@ -3,6 +3,7 @@ name = "mcp-neo4j-cypher"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
+account_id = "fbe074a4d149441eb68832d5b116cbf6"
 
 # Development settings
 [dev]
@@ -33,16 +34,22 @@ id = "placeholder-replace-with-actual-id"
 # ============================================
 [env.staging]
 name = "mcp-neo4j-cypher-staging"
-vars = { ENVIRONMENT = "staging" }
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+DEFAULT_READ_TIMEOUT = "30"
+DEFAULT_TOKEN_LIMIT = "10000"
+DEFAULT_SCHEMA_SAMPLE = "1000"
+ALLOWED_ORIGINS = "https://claude.ai,https://www.claude.ai"
 
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "mcp-neo4j-users-staging"
-database_id = "placeholder-replace-with-actual-id"
+database_id = "b0afd894-f058-4b38-9593-021dc5e1f79e"
 
 [[env.staging.kv_namespaces]]
 binding = "SESSIONS"
-id = "placeholder-replace-with-actual-id"
+id = "6273d16c007743598a144f6443872e7a"
 
 # ============================================
 # Production Environment

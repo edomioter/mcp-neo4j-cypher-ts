@@ -31,8 +31,19 @@ import * as logger from '../utils/logger.js';
 
 // Neo4j imports
 import type { Neo4jClient } from '../neo4j/client.js';
+import type { ProcessedSchema } from '../neo4j/types.js';
 import { extractSchema, formatSchemaForLLM } from '../neo4j/schema.js';
 import { executeReadQuery, executeWriteQuery, isWriteQuery, validateCypherSyntax } from '../neo4j/queries.js';
+
+// Sanitization and token imports
+import { sanitize, sanitizeNeo4jResults } from '../utils/sanitize.js';
+import { truncateToTokens } from '../utils/tokens.js';
+
+// Cache imports
+import { getCachedSchema, cacheSchema } from '../storage/cache.js';
+
+// Security imports
+import { validateQuery, sanitizeParameters } from '../security/query-validator.js';
 
 /**
  * Context passed to handlers
@@ -50,6 +61,10 @@ export interface HandlerContext {
   tokenLimit?: number;
   /** Sample size for schema extraction */
   schemaSampleSize?: number;
+  /** User ID (if authenticated) */
+  userId?: string;
+  /** Connection ID (if authenticated) */
+  connectionId?: string;
 }
 
 /**
@@ -179,13 +194,48 @@ async function executeGetSchema(
   }
 
   try {
-    // Extract schema from Neo4j
-    const schema = await extractSchema(context.neo4jClient, sampleSize);
+    let schema: ProcessedSchema | null = null;
+
+    // Try to get schema from cache first (if we have a connectionId)
+    if (context.connectionId) {
+      const cachedSchema = await getCachedSchema(context.env.SESSIONS, context.connectionId);
+      if (cachedSchema) {
+        logger.debug('Using cached schema', { connectionId: context.connectionId, requestId: context.requestId });
+        schema = cachedSchema;
+      }
+    }
+
+    // If not cached, extract from Neo4j
+    if (!schema) {
+      schema = await extractSchema(context.neo4jClient, sampleSize);
+
+      // Cache the schema for future requests
+      if (context.connectionId) {
+        await cacheSchema(context.env.SESSIONS, context.connectionId, schema);
+        logger.debug('Schema cached', { connectionId: context.connectionId, requestId: context.requestId });
+      }
+    }
+
+    // Sanitize the schema (remove any large/irrelevant data)
+    const sanitizedSchema = sanitize(schema) as ProcessedSchema;
 
     // Format for LLM consumption
-    const formattedSchema = formatSchemaForLLM(schema);
+    const formattedSchema = formatSchemaForLLM(sanitizedSchema);
 
-    return createToolResult(formattedSchema);
+    // Apply token limit truncation if configured
+    const tokenLimit = context.tokenLimit ?? DEFAULTS.TOKEN_LIMIT;
+    const tokenResult = truncateToTokens(formattedSchema, { maxTokens: tokenLimit });
+
+    if (tokenResult.truncated) {
+      logger.info('Schema response truncated due to token limit', {
+        originalTokens: tokenResult.originalTokens,
+        finalTokens: tokenResult.finalTokens,
+        tokenLimit,
+        requestId: context.requestId,
+      });
+    }
+
+    return createToolResult(tokenResult.text);
   } catch (error) {
     logger.error('Schema extraction failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -214,13 +264,31 @@ async function executeReadCypher(
   }
 
   const query = args.query;
-  const params = getOptionalObjectParam(args, 'params');
+  const rawParams = getOptionalObjectParam(args, 'params');
 
   logger.info('Executing read_neo4j_cypher', {
     queryLength: query.length,
-    hasParams: !!params,
+    hasParams: !!rawParams,
     requestId: context.requestId,
   });
+
+  // Security validation
+  const securityCheck = validateQuery(query);
+  if (!securityCheck.valid) {
+    logger.warn('Query blocked by security validation', {
+      error: securityCheck.error,
+      requestId: context.requestId,
+    });
+    throw new ValidationError(securityCheck.error ?? 'Query blocked for security reasons');
+  }
+
+  // Log warnings if any
+  if (securityCheck.warnings.length > 0) {
+    logger.info('Query warnings', { warnings: securityCheck.warnings, requestId: context.requestId });
+  }
+
+  // Sanitize parameters
+  const params = sanitizeParameters(rawParams);
 
   // Validate query syntax
   const syntaxCheck = validateCypherSyntax(query);
@@ -256,15 +324,35 @@ async function executeReadCypher(
       { timeout: context.timeout ?? DEFAULTS.READ_TIMEOUT }
     );
 
+    // Sanitize the results (filter embeddings, large lists, etc.)
+    const sanitizedRows = sanitizeNeo4jResults(result.rows);
+
     // Format result
     const output = {
       columns: result.columns,
       rowCount: result.rowCount,
-      rows: result.rows,
+      rows: sanitizedRows,
       ...(result.truncated && { truncated: true }),
     };
 
-    return createToolResult(JSON.stringify(output, null, 2));
+    // Convert to JSON string
+    let jsonOutput = JSON.stringify(output, null, 2);
+
+    // Apply token limit truncation if configured
+    const tokenLimit = context.tokenLimit ?? DEFAULTS.TOKEN_LIMIT;
+    const tokenResult = truncateToTokens(jsonOutput, { maxTokens: tokenLimit });
+
+    if (tokenResult.truncated) {
+      logger.info('Response truncated due to token limit', {
+        originalTokens: tokenResult.originalTokens,
+        finalTokens: tokenResult.finalTokens,
+        tokenLimit,
+        requestId: context.requestId,
+      });
+      jsonOutput = tokenResult.text;
+    }
+
+    return createToolResult(jsonOutput);
   } catch (error) {
     logger.error('Read query failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -305,13 +393,31 @@ async function executeWriteCypher(
   }
 
   const query = args.query;
-  const params = getOptionalObjectParam(args, 'params');
+  const rawParams = getOptionalObjectParam(args, 'params');
 
   logger.info('Executing write_neo4j_cypher', {
     queryLength: query.length,
-    hasParams: !!params,
+    hasParams: !!rawParams,
     requestId: context.requestId,
   });
+
+  // Security validation
+  const securityCheck = validateQuery(query);
+  if (!securityCheck.valid) {
+    logger.warn('Query blocked by security validation', {
+      error: securityCheck.error,
+      requestId: context.requestId,
+    });
+    throw new ValidationError(securityCheck.error ?? 'Query blocked for security reasons');
+  }
+
+  // Log warnings if any
+  if (securityCheck.warnings.length > 0) {
+    logger.info('Query warnings', { warnings: securityCheck.warnings, requestId: context.requestId });
+  }
+
+  // Sanitize parameters
+  const params = sanitizeParameters(rawParams);
 
   // Validate query syntax
   const syntaxCheck = validateCypherSyntax(query);

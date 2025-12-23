@@ -6,7 +6,7 @@
  */
 
 import type { Env } from './types.js';
-import { ROUTES, HTTP_STATUS, CONTENT_TYPES, SERVER_NAME, SERVER_VERSION } from './config/constants.js';
+import { ROUTES, HTTP_STATUS, CONTENT_TYPES, SERVER_NAME, SERVER_VERSION, MCP_METHODS } from './config/constants.js';
 import {
   createCorsPreflightResponse,
   addCorsHeaders,
@@ -16,6 +16,23 @@ import { ParseError, toMcpError, createJsonRpcErrorResponse } from './utils/erro
 import * as logger from './utils/logger.js';
 import { parseJsonRpcRequest, isNotification, jsonRpcSuccess } from './mcp/protocol.js';
 import { routeRequest, type HandlerContext } from './mcp/handlers.js';
+
+// Authentication and storage imports
+import { optionalAuth } from './auth/middleware.js';
+import { createNeo4jClient } from './neo4j/client.js';
+
+// Setup UI and API imports
+import { generateSetupPageHtml } from './config/ui.js';
+import { handleSetupPost, handleConnectionStatus } from './api/setup.js';
+
+// Security imports
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  createRateLimitHeaders,
+  createRateLimitResponse,
+} from './security/ratelimit.js';
+import * as audit from './security/audit.js';
 
 /**
  * Generate a unique request ID
@@ -56,53 +73,10 @@ function handleHealthCheck(): Response {
 }
 
 /**
- * Handle setup UI endpoint
+ * Handle setup UI endpoint (GET)
  */
 function handleSetupGet(): Response {
-  // TODO: Implement full setup UI in Phase 7
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP Neo4j Setup</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      max-width: 600px;
-      margin: 50px auto;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-    .container {
-      background: white;
-      padding: 30px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    h1 { color: #333; margin-bottom: 10px; }
-    p { color: #666; }
-    .status {
-      padding: 10px;
-      background: #e8f5e9;
-      border-radius: 4px;
-      color: #2e7d32;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>MCP Neo4j Cypher Server</h1>
-    <p>Server is running. Setup UI coming in Phase 7.</p>
-    <div class="status">
-      <strong>Status:</strong> Operational<br>
-      <strong>Version:</strong> ${SERVER_VERSION}
-    </div>
-  </div>
-</body>
-</html>
-  `.trim();
+  const html = generateSetupPageHtml();
 
   return new Response(html, {
     status: HTTP_STATUS.OK,
@@ -111,11 +85,30 @@ function handleSetupGet(): Response {
 }
 
 /**
+ * Check if method requires authentication
+ *
+ * Some MCP methods (like initialize, tools/list) work without auth,
+ * but tools/call requires authentication to access Neo4j.
+ */
+function methodRequiresAuth(method: string): boolean {
+  // These methods work without authentication
+  const publicMethods: string[] = [
+    MCP_METHODS.INITIALIZE,
+    MCP_METHODS.INITIALIZED,
+    MCP_METHODS.TOOLS_LIST,
+    MCP_METHODS.PING,
+  ];
+
+  return !publicMethods.includes(method);
+}
+
+/**
  * Handle MCP endpoint (JSON-RPC over HTTP)
  */
 async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
   const requestId = generateRequestId();
   const reqLogger = logger.createRequestLogger(requestId);
+  const config = getServerConfig(env);
 
   try {
     // Parse JSON body
@@ -131,12 +124,55 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
 
     reqLogger.info('MCP request received', { method: rpcRequest.method, id: rpcRequest.id });
 
+    // Try to authenticate (optional for some methods)
+    const authContext = await optionalAuth(request, env);
+
+    // Rate limiting
+    const rateLimitId = getRateLimitIdentifier(request, authContext?.userId);
+    const rateLimitResult = await checkRateLimit(env.SESSIONS, rateLimitId);
+
+    if (!rateLimitResult.allowed) {
+      audit.logRateLimitExceeded(request, rateLimitId, rateLimitResult.current, rateLimitResult.limit, requestId);
+      return createRateLimitResponse(rateLimitResult);
+    }
+
+    // Check if authentication is required for this method
+    const requiresAuth = methodRequiresAuth(rpcRequest.method);
+
     // Create handler context
     const context: HandlerContext = {
       env,
       requestId,
-      readOnly: false, // TODO: Get from user connection in Phase 5
+      readOnly: authContext?.readOnly ?? false,
+      timeout: config.readTimeout,
+      tokenLimit: config.tokenLimit,
+      schemaSampleSize: config.schemaSampleSize,
     };
+
+    // If authenticated, create Neo4j client
+    if (authContext) {
+      context.neo4jClient = createNeo4jClient(authContext.connection, {
+        defaultTimeout: config.readTimeout,
+        tokenLimit: config.tokenLimit,
+        schemaSampleSize: config.schemaSampleSize,
+      });
+      context.connectionId = authContext.connectionId;
+      context.userId = authContext.userId;
+      context.readOnly = authContext.readOnly;
+
+      reqLogger.debug('Request authenticated', {
+        userId: authContext.userId,
+        connectionId: authContext.connectionId,
+      });
+
+      // Audit log successful authentication
+      audit.logAuthSuccess(request, authContext.userId, requestId);
+    } else if (requiresAuth) {
+      // Method requires auth but user is not authenticated
+      reqLogger.warn('Authentication required but not provided', { method: rpcRequest.method });
+      audit.logAuthFailure(request, 'No credentials provided', requestId);
+      // We still proceed - the handler will return an appropriate error
+    }
 
     // Route to appropriate handler
     const result = await routeRequest(rpcRequest, context);
@@ -146,7 +182,10 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
       case 'notification':
         // Notifications don't get a response
         if (isNotification(rpcRequest)) {
-          return new Response(null, { status: HTTP_STATUS.NO_CONTENT });
+          return new Response(null, {
+            status: HTTP_STATUS.NO_CONTENT,
+            headers: createRateLimitHeaders(rateLimitResult),
+          });
         }
         // If client sent an id, acknowledge with empty result
         return new Response(
@@ -156,6 +195,7 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
             headers: {
               'Content-Type': CONTENT_TYPES.JSON,
               'X-Request-Id': requestId,
+              ...createRateLimitHeaders(rateLimitResult),
             },
           }
         );
@@ -168,6 +208,7 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
             headers: {
               'Content-Type': CONTENT_TYPES.JSON,
               'X-Request-Id': requestId,
+              ...createRateLimitHeaders(rateLimitResult),
             },
           }
         );
@@ -264,8 +305,17 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         if (method === 'GET') {
           response = handleSetupGet();
         } else if (method === 'POST') {
-          // TODO: Implement setup POST in Phase 7
+          response = await handleSetupPost(request, env);
+        } else {
           response = handleMethodNotAllowed(['GET', 'POST']);
+        }
+        break;
+
+      case ROUTES.API_SETUP:
+        if (method === 'POST') {
+          response = await handleSetupPost(request, env);
+        } else if (method === 'GET') {
+          response = await handleConnectionStatus(request, env);
         } else {
           response = handleMethodNotAllowed(['GET', 'POST']);
         }
