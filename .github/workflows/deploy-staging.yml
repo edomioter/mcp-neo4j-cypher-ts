@@ -1,0 +1,80 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    name: Deploy to Staging
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Cloudflare Workers (Staging)
+        run: npx wrangler deploy --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Run Smoke Tests
+        run: |
+          chmod +x ./test/staging/smoke-tests.sh
+          STAGING_URL="https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev" ./test/staging/smoke-tests.sh
+        continue-on-error: false
+
+  notify:
+    name: Notify Status
+    needs: [test, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check deployment status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Staging deployment successful!"
+            echo "URL: https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev"
+          else
+            echo "❌ Staging deployment failed!"
+            exit 1
+          fi

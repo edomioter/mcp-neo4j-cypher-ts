@@ -1,0 +1,138 @@
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        type: string
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "❌ Deployment not confirmed. Please type 'deploy' to confirm."
+            exit 1
+          fi
+          echo "✅ Deployment confirmed"
+
+  test:
+    name: Run Tests
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+  deploy-staging-first:
+    name: Deploy to Staging (Validation)
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Staging first
+        run: npx wrangler deploy --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Run Smoke Tests on Staging
+        run: |
+          chmod +x ./test/staging/smoke-tests.sh
+          STAGING_URL="https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev" ./test/staging/smoke-tests.sh
+
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging-first
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Cloudflare Workers (Production)
+        run: npx wrangler deploy --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Run Smoke Tests on Production
+        run: |
+          chmod +x ./test/staging/smoke-tests.sh
+          STAGING_URL="https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev" ./test/staging/smoke-tests.sh
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Notify Status
+    needs: [test, deploy-staging-first, deploy-production]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check deployment status
+        run: |
+          if [ "${{ needs.deploy-production.result }}" == "success" ]; then
+            echo "✅ Production deployment successful!"
+            echo "URL: https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev"
+          else
+            echo "❌ Production deployment failed!"
+            exit 1
+          fi
