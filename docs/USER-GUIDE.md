@@ -68,6 +68,8 @@ Fill in the connection form:
 - Local: `bolt://localhost:7687` or `neo4j://localhost:7687`
 - Remote: `neo4j+s://your-server.com:7687`
 
+> ⚠️ **Important:** Before proceeding, make sure your Neo4j database is **running and accessible**. The setup process will test the connection, and if your database is offline or unreachable, the configuration will fail.
+
 ### 1.3 Test and Save
 
 1. Click **"Test & Save Connection"**
@@ -95,25 +97,45 @@ Use this token to configure Claude.ai
 
 ## Step 2: Add the MCP Server to Claude.ai
 
-### 2.1 Open Claude.ai Settings
+### 2.1 Build Your MCP Server URL
+
+Once you have your session token, you need to create the complete MCP server URL by appending the token as a query parameter.
+
+**URL Format:**
+```
+https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev/mcp?token=YOUR_TOKEN_HERE
+```
+
+**Example:**
+If your token is `KNdUaJFXdpBuTIXKozg0WFgtyMxdL0AeFpnd1wwxUMg`, your complete URL would be:
+```
+https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev/mcp?token=KNdUaJFXdpBuTIXKozg0WFgtyMxdL0AeFpnd1wwxUMg
+```
+
+> 💡 **Tip:** The token is included in the URL because Claude.ai's MCP integration currently only accepts a server URL (no separate authentication field).
+
+### 2.2 Open Claude.ai Settings
 
 1. Go to [claude.ai](https://claude.ai)
 2. Click on your profile icon (bottom-left)
 3. Select **"Settings"**
 4. Navigate to **"Integrations"** or **"MCP Servers"**
 
-### 2.2 Add New MCP Server
+### 2.3 Add New MCP Server
 
 Click **"Add MCP Server"** or **"Add Integration"** and enter:
 
 | Setting | Value |
 |---------|-------|
 | **Name** | `Neo4j Database` (or any name you prefer) |
-| **Server URL** | `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev/mcp` |
-| **Authentication** | Bearer Token |
-| **Token** | Your session token from Step 1 |
+| **Server URL** | Your complete URL with token from Step 2.1 |
 
-### 2.3 Verify Connection
+**Example:**
+```
+https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev/mcp?token=YOUR_TOKEN_HERE
+```
+
+### 2.4 Verify Connection
 
 After adding the server:
 
@@ -122,6 +144,12 @@ After adding the server:
    - `get_neo4j_schema`
    - `read_neo4j_cypher`
    - `write_neo4j_cypher`
+
+> ⚠️ **Troubleshooting:** If Claude shows "Disconnected" or fails to connect:
+> - Verify your token is correct and hasn't expired (tokens last 24 hours)
+> - Check that your Neo4j database is still running and accessible
+> - Ensure the URL is properly formatted with the token parameter
+> - Try creating a new connection from `/setup` to get a fresh token
 
 ---
 
