@@ -24,6 +24,7 @@ import { createNeo4jClient } from './neo4j/client.js';
 // Setup UI and API imports
 import { generateSetupPageHtml } from './config/ui.js';
 import { handleSetupPost, handleConnectionStatus } from './api/setup.js';
+import { handleListTokens, handleRevokeToken } from './api/tokens.js';
 
 // Security imports
 import {
@@ -318,6 +319,22 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           response = await handleConnectionStatus(request, env);
         } else {
           response = handleMethodNotAllowed(['GET', 'POST']);
+        }
+        break;
+
+      case ROUTES.TOKENS:
+        if (method === 'GET') {
+          response = await handleListTokens(request, env);
+        } else {
+          response = handleMethodNotAllowed(['GET']);
+        }
+        break;
+
+      case ROUTES.REVOKE_TOKEN:
+        if (method === 'POST') {
+          response = await handleRevokeToken(request, env);
+        } else {
+          response = handleMethodNotAllowed(['POST']);
         }
         break;
 

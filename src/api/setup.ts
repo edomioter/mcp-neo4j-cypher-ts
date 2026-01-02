@@ -11,6 +11,7 @@ import { createUser } from '../storage/users.js';
 import { createConnection } from '../storage/connections.js';
 import { createSession } from '../auth/session.js';
 import * as logger from '../utils/logger.js';
+import * as audit from '../security/audit.js';
 
 /**
  * Setup request body
@@ -217,6 +218,14 @@ export async function handleSetupPost(
     // Create session
     const token = await createSession(env.SESSIONS, userId, connectionId);
     logger.info('Session created', { userId, connectionId });
+
+    // Audit log: Permanent token created
+    audit.logTokenCreated(
+      request,
+      userId,
+      connectionId,
+      audit.maskSensitive(token, 8)
+    );
 
     // Return success response
     const response: SetupResponse = {

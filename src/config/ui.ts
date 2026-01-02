@@ -310,6 +310,12 @@ const SCRIPT = `
 
       // Success! Show token and instructions
       tokenDisplay.textContent = result.token;
+
+      // Show the complete URL with token
+      const baseUrl = window.location.origin;
+      const urlWithToken = baseUrl + '/mcp?token=' + result.token;
+      document.getElementById('urlFormat').textContent = urlWithToken;
+
       formContainer.style.display = 'none';
       successContainer.classList.add('show');
 
@@ -433,22 +439,33 @@ export function generateSetupPageHtml(): string {
         <div class="success-box">
           <h3>✅ Connection Successful!</h3>
           <p>Your Neo4j database has been connected. Use the token below to authenticate your requests.</p>
+          <p style="color: #10b981; font-weight: 600; margin-top: 8px;">
+            🔐 This token is permanent and will not expire. Keep it secure!
+          </p>
         </div>
 
-        <label>Your Session Token:</label>
+        <label>Your Permanent Access Token:</label>
         <div class="token-box">
           <span id="tokenDisplay"></span>
           <button class="copy-btn" onclick="copyToken()">Copy</button>
         </div>
 
         <div class="instructions">
-          <h4>How to use with Claude:</h4>
+          <h4>How to use with Claude.ai:</h4>
           <ol>
             <li>Copy the token above</li>
             <li>In Claude.ai, go to <strong>Settings → MCP Servers</strong></li>
-            <li>Add this server URL with your token as the Authorization header</li>
-            <li>Or include the token in requests as: <code>Authorization: Bearer YOUR_TOKEN</code></li>
+            <li>Add a new server with this URL format:<br>
+                <code id="urlFormat" style="display: block; margin-top: 4px; word-break: break-all;"></code>
+            </li>
+            <li>The token will remain valid permanently - no need to update it!</li>
           </ol>
+          <h4 style="margin-top: 16px;">Security:</h4>
+          <ul style="margin-left: 20px; color: #475569;">
+            <li>Keep your token secure - it provides permanent access to your Neo4j database</li>
+            <li>To revoke this token, use the <code>POST /api/tokens/revoke</code> endpoint</li>
+            <li>You can create multiple tokens by running setup again with the same credentials</li>
+          </ul>
         </div>
 
         <button onclick="startOver()" style="margin-top: 20px; background: #6b7280;">

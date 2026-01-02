@@ -22,6 +22,10 @@ export type AuditEventType =
   | 'setup_success'
   | 'setup_failure'
   | 'connection_test'
+  | 'token_created'
+  | 'token_revoked'
+  | 'token_list_accessed'
+  | 'token_revoke_attempt'
   | 'suspicious_activity';
 
 /**
@@ -310,6 +314,90 @@ function extractDomain(uri: string): string {
   } catch {
     return 'invalid-uri';
   }
+}
+
+/**
+ * Log token creation
+ */
+export function logTokenCreated(
+  request: Request,
+  userId: string,
+  connectionId: string,
+  tokenPreview: string,
+  requestId?: string
+): void {
+  const entry = createAuditEntry('token_created', request, {
+    requestId,
+    userId,
+    data: {
+      connectionId,
+      tokenPreview,
+      permanent: true,
+    },
+  });
+
+  logger.info('AUDIT: Permanent token created', { ...entry });
+}
+
+/**
+ * Log token revocation
+ */
+export function logTokenRevoked(
+  request: Request,
+  userId: string,
+  tokenPreview: string,
+  requestId?: string
+): void {
+  const entry = createAuditEntry('token_revoked', request, {
+    requestId,
+    userId,
+    data: {
+      tokenPreview,
+    },
+  });
+
+  logger.info('AUDIT: Token revoked', { ...entry });
+}
+
+/**
+ * Log token list access
+ */
+export function logTokenListAccessed(
+  request: Request,
+  userId: string,
+  tokenCount: number,
+  requestId?: string
+): void {
+  const entry = createAuditEntry('token_list_accessed', request, {
+    requestId,
+    userId,
+    data: {
+      tokenCount,
+    },
+  });
+
+  logger.info('AUDIT: Token list accessed', { ...entry });
+}
+
+/**
+ * Log failed token revocation attempt
+ */
+export function logTokenRevokeAttemptFailed(
+  request: Request,
+  userId: string,
+  reason: string,
+  requestId?: string
+): void {
+  const entry = createAuditEntry('token_revoke_attempt', request, {
+    requestId,
+    userId,
+    data: {
+      reason,
+      success: false,
+    },
+  });
+
+  logger.warn('AUDIT: Token revocation attempt failed', { ...entry });
 }
 
 /**

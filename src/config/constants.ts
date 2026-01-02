@@ -28,8 +28,8 @@ export const DEFAULTS = {
   /** Default sample size for schema extraction */
   SCHEMA_SAMPLE_SIZE: 1000,
 
-  /** Session TTL in seconds (24 hours) */
-  SESSION_TTL: 86400,
+  /** Session TTL in seconds (10 years - effectively permanent) */
+  SESSION_TTL: 315360000,
 
   /** Schema cache TTL in seconds (5 minutes) */
   SCHEMA_CACHE_TTL: 300,
@@ -65,6 +65,10 @@ export const ROUTES = {
 
   /** API endpoint for setup */
   API_SETUP: '/api/setup',
+
+  /** Token management endpoints */
+  TOKENS: '/api/tokens',
+  REVOKE_TOKEN: '/api/tokens/revoke',
 } as const;
 
 /**

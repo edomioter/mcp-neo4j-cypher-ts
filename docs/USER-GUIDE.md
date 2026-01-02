@@ -91,7 +91,7 @@ Your session token:
 Use this token to configure Claude.ai
 ```
 
-**Important:** Copy and save this token securely. You'll need it for the next step.
+**Important:** Copy and save this token securely. This token is **permanent and will not expire** - you only need to configure it once!
 
 ---
 
@@ -146,10 +146,10 @@ After adding the server:
    - `write_neo4j_cypher`
 
 > ⚠️ **Troubleshooting:** If Claude shows "Disconnected" or fails to connect:
-> - Verify your token is correct and hasn't expired (tokens last 24 hours)
+> - Verify your token is correct (tokens are permanent and don't expire)
 > - Check that your Neo4j database is still running and accessible
 > - Ensure the URL is properly formatted with the token parameter
-> - Try creating a new connection from `/setup` to get a fresh token
+> - If needed, you can revoke and create a new token from `/setup`
 
 ---
 
@@ -312,14 +312,29 @@ What's the average rating of movies by genre?
 | Firewall blocking | Ensure port 7687 is accessible |
 | Database not running | Start your Neo4j instance |
 
-#### "Session expired" in Claude
+#### Token Management
 
-Your session token expires after 24 hours. To fix:
+Tokens are permanent and don't expire. However, if you need to revoke a token:
 
-1. Go back to the setup page
+**To revoke a token:**
+```bash
+curl -X POST https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev/api/tokens/revoke \
+  -H "Authorization: Bearer YOUR_CURRENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"token": "TOKEN_TO_REVOKE"}'
+```
+
+**To list your active tokens:**
+```bash
+curl -X GET https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev/api/tokens \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**To create a new token:**
+1. Go back to the `/setup` page
 2. Re-enter your credentials
-3. Get a new session token
-4. Update the token in Claude.ai settings
+3. Get a new permanent token
+4. Update the URL in Claude.ai settings (if replacing the old one)
 
 ### Query Issues
 
@@ -368,7 +383,7 @@ Query my graph database for products
 
 - ✅ **Credentials encrypted:** Your Neo4j password is encrypted with AES-256-GCM
 - ✅ **No credential storage:** We don't store your password in plain text
-- ✅ **Session tokens:** Expire after 24 hours
+- ✅ **Session tokens:** Permanent tokens with manual revocation
 - ✅ **HTTPS only:** All communication is encrypted
 
 ### Best Practices
@@ -470,7 +485,7 @@ For bugs or feature requests, please open an issue on the GitHub repository.
 │  • read_neo4j_cypher - Query data (read-only)               │
 │  • write_neo4j_cypher - Modify data (if enabled)            │
 │                                                             │
-│  Session Duration: 24 hours                                 │
+│  Session Duration: Permanent (revocable)                    │
 │  Rate Limit: 100 requests/minute                            │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
