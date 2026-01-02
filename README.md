@@ -7,7 +7,9 @@ A Model Context Protocol (MCP) server that enables Claude to query Neo4j databas
 - **3 MCP Tools**: `get_neo4j_schema`, `read_neo4j_cypher`, `write_neo4j_cypher`
 - **Multi-tenant**: Each user connects their own Neo4j database
 - **Serverless**: Runs on Cloudflare Workers (no servers to manage)
-- **Secure**: AES-256-GCM encryption, rate limiting, query validation
+- **Permanent Tokens**: Configure once, no need to renew tokens every 24 hours
+- **Token Management**: List and revoke tokens via API for security control
+- **Secure**: AES-256-GCM encryption, rate limiting, query validation, audit logging
 - **Compatible**: Works with Neo4j Aura, self-hosted Neo4j 4.x/5.x
 
 ## Quick Start
@@ -48,24 +50,30 @@ npx wrangler deploy
    - **Password**: Your database password
    - **Database**: Usually `neo4j`
 3. Click "Test & Save Connection"
-4. Copy the session token
+4. Copy the **permanent access token** (valid indefinitely, no expiration)
 
 ### 3. Use with Claude
 
-Add the MCP server to your Claude configuration:
+**For Claude.ai:** Add the server URL with your token as a parameter:
+```
+https://your-worker.workers.dev/mcp?token=YOUR_PERMANENT_TOKEN
+```
 
+**For Claude Desktop:** Add to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "neo4j": {
       "url": "https://your-worker.workers.dev/mcp",
       "headers": {
-        "Authorization": "Bearer YOUR_SESSION_TOKEN"
+        "Authorization": "Bearer YOUR_PERMANENT_TOKEN"
       }
     }
   }
 }
 ```
+
+> 💡 **Note**: Tokens are permanent and don't expire. You only need to configure this once!
 
 Now you can ask Claude things like:
 - "What's the schema of my Neo4j database?"
@@ -79,6 +87,26 @@ Now you can ask Claude things like:
 | `get_neo4j_schema` | Retrieves database schema (labels, properties, relationships) |
 | `read_neo4j_cypher` | Executes read-only Cypher queries (MATCH, RETURN) |
 | `write_neo4j_cypher` | Executes write queries (CREATE, MERGE, DELETE) |
+
+## Token Management
+
+Your access tokens are **permanent** and don't expire. However, you can manage them for security:
+
+### List Active Tokens
+```bash
+curl -X GET https://your-worker.workers.dev/api/tokens \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Revoke a Token
+```bash
+curl -X POST https://your-worker.workers.dev/api/tokens/revoke \
+  -H "Authorization: Bearer YOUR_CURRENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"token": "TOKEN_TO_REVOKE"}'
+```
+
+> ⚠️ **Security**: Keep your tokens secure. If compromised, revoke them immediately and create a new one.
 
 ## Documentation
 
