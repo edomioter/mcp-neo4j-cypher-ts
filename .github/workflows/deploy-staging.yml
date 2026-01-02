@@ -57,6 +57,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
+      - name: Install jq for smoke tests
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Run Smoke Tests
         run: |
           chmod +x ./test/staging/smoke-tests.sh
