@@ -25,3 +25,6 @@ Thumbs.db
 
 # Wrangler
 .wrangler/
+
+# Claude Code configuration
+.claude/
