@@ -12,8 +12,8 @@ Complete guide for deploying the MCP Neo4j Cypher Server to Cloudflare Workers.
 ## Step 1: Clone and Install
 
 ```bash
-git clone https://github.com/your-org/mcp-neo4j-cypher-cf.git
-cd mcp-neo4j-cypher-cf
+git clone https://github.com/edomioter/mcp-neo4j-cypher-ts.git
+cd mcp-neo4j-cypher-ts
 npm install
 ```
 
@@ -62,7 +62,8 @@ Update `wrangler.toml` with your resource IDs:
 ```toml
 name = "mcp-neo4j-cypher"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"

@@ -43,8 +43,8 @@ wrangler logpush create \
 O vía API:
 
 ```bash
-curl -X POST "https://api.cloudflare.com/client/v4/accounts/fbe074a4d149441eb68832d5b116cbf6/logpush/jobs" \
-  -H "Authorization: Bearer OW3dOd9zDhVZGahrdeZvLkOdYUQlAT78xQqxsW2b" \
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/logpush/jobs" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data '{
     "name": "mcp-neo4j-logs-production",

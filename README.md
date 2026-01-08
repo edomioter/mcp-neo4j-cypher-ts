@@ -18,8 +18,8 @@ A Model Context Protocol (MCP) server that enables Claude to query Neo4j databas
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/mcp-neo4j-cypher-cf.git
-cd mcp-neo4j-cypher-cf
+git clone https://github.com/edomioter/mcp-neo4j-cypher-ts.git
+cd mcp-neo4j-cypher-ts
 
 # Install dependencies
 npm install
