@@ -545,9 +545,9 @@ export async function checkRateLimitProbabilistic(
 - [x] Implementar OPT-1 - Métodos públicos exentos de rate limiting
 - [x] Implementar OPT-2 - Lazy write con threshold 50%
 - [x] Actualizar tests unitarios (5 nuevos tests añadidos)
-- [ ] Deploy a staging
-- [ ] Verificar logs de operaciones KV
-- [ ] Deploy a producción
+- [x] Deploy a staging (2025-01-09)
+- [x] Verificar funcionamiento en staging
+- [ ] Deploy a producción (PENDIENTE - programar ventana de mantenimiento)
 - [ ] Monitorear métricas 24h
 
 **Archivos Modificados:**
@@ -689,6 +689,7 @@ Si las respuestas son afirmativas, proceder con Fase 2. Fase 3 solo si hay neces
 |-------|---------|--------|
 | 2025-01-09 | 2.0 | Documento inicial con 5 optimizaciones propuestas |
 | 2025-01-09 | 2.1 | Fase 1 implementada: OPT-1 y OPT-2 completadas, 181 tests pasando |
+| 2025-01-09 | 2.2 | Staging desplegado y verificado. Producción pendiente de ventana de mantenimiento |
 
 ---
 
