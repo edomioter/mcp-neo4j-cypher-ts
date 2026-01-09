@@ -267,4 +267,78 @@ describe('Rate Limiting', () => {
       expect(headers['X-RateLimit-Reset']).toBe('30');
     });
   });
+
+  describe('Lazy Write Optimization (OPT-2)', () => {
+    it('should write on first request in window', async () => {
+      const mockKv = createMockKV();
+      const putSpy = vi.spyOn(mockKv, 'put');
+
+      await checkRateLimit(mockKv, 'user:new', { maxRequests: 100, windowSeconds: 60 });
+
+      // First request should always write
+      expect(putSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not write when below threshold', async () => {
+      const mockKv = createMockKV();
+
+      // First request - this will write (first in window)
+      await checkRateLimit(mockKv, 'user:test', { maxRequests: 100, windowSeconds: 60 });
+
+      const putSpy = vi.spyOn(mockKv, 'put');
+
+      // Second request - should not write (count=2, threshold=50, 2 <= 50)
+      await checkRateLimit(mockKv, 'user:test', { maxRequests: 100, windowSeconds: 60 });
+
+      // Should not have written since we're below threshold
+      expect(putSpy).toHaveBeenCalledTimes(0);
+    });
+
+    it('should write when exceeding threshold', async () => {
+      const mockKv = createMockKV();
+
+      // First request establishes counter at 1
+      await checkRateLimit(mockKv, 'user:high', { maxRequests: 100, windowSeconds: 60 });
+
+      // Manually set KV to simulate 50 requests (at threshold)
+      await mockKv.put('rate:user:high', JSON.stringify({ count: 50, window: Math.floor(Date.now() / 1000 / 60) * 60 }));
+
+      const putSpy = vi.spyOn(mockKv, 'put');
+
+      // Next request should trigger a write (count=51 exceeds 50% threshold)
+      await checkRateLimit(mockKv, 'user:high', { maxRequests: 100, windowSeconds: 60 });
+
+      expect(putSpy).toHaveBeenCalled();
+    });
+
+    it('should still enforce limits when counter is persisted', async () => {
+      const mockKv = createMockKV();
+      const config = { maxRequests: 5, windowSeconds: 60 };
+
+      // Manually set KV to simulate 5 requests already made
+      const currentWindow = Math.floor(Date.now() / 1000 / 60) * 60;
+      await mockKv.put('rate:user:limit-test', JSON.stringify({ count: 5, window: currentWindow }));
+
+      // 6th request should be blocked
+      const result = await checkRateLimit(mockKv, 'user:limit-test', config);
+      expect(result.allowed).toBe(false);
+      expect(result.current).toBe(6);
+    });
+
+    it('should correctly count requests when writes occur', async () => {
+      const mockKv = createMockKV();
+      // Use larger limit where lazy write behavior is clearer
+      const config = { maxRequests: 10, windowSeconds: 60 };
+
+      // First request (writes)
+      const r1 = await checkRateLimit(mockKv, 'user:count-test', config);
+      expect(r1.current).toBe(1);
+      expect(r1.allowed).toBe(true);
+
+      // Second request (doesn't write, but count increments in memory)
+      const r2 = await checkRateLimit(mockKv, 'user:count-test', config);
+      expect(r2.current).toBe(2);
+      expect(r2.allowed).toBe(true);
+    });
+  });
 });

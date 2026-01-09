@@ -32,6 +32,7 @@ import {
   getRateLimitIdentifier,
   createRateLimitHeaders,
   createRateLimitResponse,
+  type RateLimitResult,
 } from './security/ratelimit.js';
 import * as audit from './security/audit.js';
 
@@ -86,21 +87,37 @@ function handleSetupGet(): Response {
 }
 
 /**
+ * Public MCP methods that don't require authentication
+ * These are also exempt from rate limiting (OPT-1 optimization)
+ */
+const PUBLIC_MCP_METHODS: string[] = [
+  MCP_METHODS.INITIALIZE,
+  MCP_METHODS.INITIALIZED,
+  MCP_METHODS.TOOLS_LIST,
+  MCP_METHODS.PING,
+];
+
+/**
  * Check if method requires authentication
  *
  * Some MCP methods (like initialize, tools/list) work without auth,
  * but tools/call requires authentication to access Neo4j.
  */
 function methodRequiresAuth(method: string): boolean {
-  // These methods work without authentication
-  const publicMethods: string[] = [
-    MCP_METHODS.INITIALIZE,
-    MCP_METHODS.INITIALIZED,
-    MCP_METHODS.TOOLS_LIST,
-    MCP_METHODS.PING,
-  ];
+  return !PUBLIC_MCP_METHODS.includes(method);
+}
 
-  return !publicMethods.includes(method);
+/**
+ * Check if method requires rate limiting
+ *
+ * Public methods (initialize, tools/list, ping) are exempt from rate limiting
+ * as they are low-cost operations and don't access user resources.
+ * This reduces KV operations for common MCP handshake flows.
+ *
+ * @see Roadmap_v2.md OPT-1
+ */
+function methodRequiresRateLimit(method: string): boolean {
+  return !PUBLIC_MCP_METHODS.includes(method);
 }
 
 /**
@@ -128,17 +145,22 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
     // Try to authenticate (optional for some methods)
     const authContext = await optionalAuth(request, env);
 
-    // Rate limiting
-    const rateLimitId = getRateLimitIdentifier(request, authContext?.userId);
-    const rateLimitResult = await checkRateLimit(env.SESSIONS, rateLimitId);
-
-    if (!rateLimitResult.allowed) {
-      audit.logRateLimitExceeded(request, rateLimitId, rateLimitResult.current, rateLimitResult.limit, requestId);
-      return createRateLimitResponse(rateLimitResult);
-    }
-
     // Check if authentication is required for this method
     const requiresAuth = methodRequiresAuth(rpcRequest.method);
+
+    // Rate limiting - only for methods that require it (OPT-1 optimization)
+    // Public methods (initialize, tools/list, ping) skip rate limiting to reduce KV ops
+    let rateLimitResult: RateLimitResult | null = null;
+
+    if (methodRequiresRateLimit(rpcRequest.method)) {
+      const rateLimitId = getRateLimitIdentifier(request, authContext?.userId);
+      rateLimitResult = await checkRateLimit(env.SESSIONS, rateLimitId);
+
+      if (!rateLimitResult.allowed) {
+        audit.logRateLimitExceeded(request, rateLimitId, rateLimitResult.current, rateLimitResult.limit, requestId);
+        return createRateLimitResponse(rateLimitResult);
+      }
+    }
 
     // Create handler context
     const context: HandlerContext = {
@@ -178,6 +200,9 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
     // Route to appropriate handler
     const result = await routeRequest(rpcRequest, context);
 
+    // Build rate limit headers (only if rate limiting was applied)
+    const rateLimitHeaders = rateLimitResult ? createRateLimitHeaders(rateLimitResult) : {};
+
     // Handle different result types
     switch (result.type) {
       case 'notification':
@@ -185,7 +210,7 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
         if (isNotification(rpcRequest)) {
           return new Response(null, {
             status: HTTP_STATUS.NO_CONTENT,
-            headers: createRateLimitHeaders(rateLimitResult),
+            headers: rateLimitHeaders,
           });
         }
         // If client sent an id, acknowledge with empty result
@@ -196,7 +221,7 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
             headers: {
               'Content-Type': CONTENT_TYPES.JSON,
               'X-Request-Id': requestId,
-              ...createRateLimitHeaders(rateLimitResult),
+              ...rateLimitHeaders,
             },
           }
         );
@@ -209,7 +234,7 @@ async function handleMcpRequest(request: Request, env: Env): Promise<Response> {
             headers: {
               'Content-Type': CONTENT_TYPES.JSON,
               'X-Request-Id': requestId,
-              ...createRateLimitHeaders(rateLimitResult),
+              ...rateLimitHeaders,
             },
           }
         );

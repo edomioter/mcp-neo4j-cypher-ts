@@ -1,117 +1,132 @@
 # Claude.md - MCP Neo4j Cypher Server en Cloudflare Workers
 
-## 📋 Descripción del Proyecto
+## Descripcion del Proyecto
 
 Servidor MCP (Model Context Protocol) que permite a usuarios de Claude.ai conectar sus propias instancias de Neo4j Aura y ejecutar consultas Cypher mediante lenguaje natural. Desplegado en Cloudflare Workers como infraestructura serverless.
 
 **Objetivo:** Crear un puente entre Claude.ai y Neo4j que permita:
 - Extraer el esquema de bases de datos Neo4j
 - Ejecutar queries Cypher de lectura y escritura
-- Gestionar múltiples usuarios con sus propias conexiones
+- Gestionar multiples usuarios con sus propias conexiones
 - Mantener seguridad y aislamiento entre usuarios
 
-**Producto Final:** Un endpoint HTTPS que Claude.ai consume vía protocolo MCP, permitiendo conversaciones como:
+**Producto Final:** Un endpoint HTTPS que Claude.ai consume via protocolo MCP, permitiendo conversaciones como:
 ```
-Usuario: "¿Qué contiene mi base de datos Neo4j?"
+Usuario: "Que contiene mi base de datos Neo4j?"
 Claude: [Usa get_neo4j_schema] "Tu BD tiene labels: Person, Movie..."
 
-Usuario: "Muéstrame 5 películas"
+Usuario: "Muestrame 5 peliculas"
 Claude: [Usa read_neo4j_cypher] MATCH (m:Movie)... [Resultados]
 ```
 
+**URL Produccion:** `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev`
+
 ---
 
-## 🏗️ Arquitectura del Sistema
+## Arquitectura del Sistema
 
-### Stack Tecnológico
+### Stack Tecnologico
 
 ```yaml
 Runtime: Cloudflare Workers (V8 Engine)
 Lenguaje: TypeScript 5.3+
 Transporte: HTTP/SSE (Server-Sent Events)
+Protocolo: JSON-RPC 2.0 (MCP spec 2024-11-05)
 Storage:
   - D1 (SQLite): Usuarios y conexiones
-  - KV: Sesiones y caché
-  - Secrets: Claves de encriptación
+  - KV: Sesiones, cache de schema, rate limiting
+  - Secrets: Claves de encriptacion
 Base de datos: Neo4j Aura (HTTP API)
-Protocolo: JSON-RPC 2.0 (MCP spec)
+Seguridad: AES-256-GCM para credenciales, tokens de sesion
 ```
 
 ### Diagrama de Arquitectura
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                      CLAUDE.AI CLIENT                          │
-│  MCP Host ejecutando en browser/desktop                       │
-└───────────────────────┬────────────────────────────────────────┘
-                        │ HTTPS POST (JSON-RPC 2.0)
-                        ▼
-┌────────────────────────────────────────────────────────────────┐
-│            CLOUDFLARE WORKER (Edge Computing)                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Entry Point (src/index.ts)                              │  │
-│  │  • CORS handling                                         │  │
-│  │  • Route dispatching                                     │  │
-│  └────────────┬─────────────────────────────────────────────┘  │
-│               │                                                 │
-│  ┌────────────▼─────────────────────────────────────────────┐  │
-│  │  MCP Protocol Layer (src/mcp/)                           │  │
-│  │  • JSON-RPC 2.0 parsing                                  │  │
-│  │  • Method routing (initialize, tools/list, tools/call)   │  │
-│  │  • Error handling                                        │  │
-│  └────────────┬─────────────────────────────────────────────┘  │
-│               │                                                 │
-│  ┌────────────▼─────────────────────────────────────────────┐  │
-│  │  Authentication Layer (src/auth/)                        │  │
-│  │  • Token validation                                      │  │
-│  │  • User resolution                                       │  │
-│  │  • Session management                                    │  │
-│  └────────────┬─────────────────────────────────────────────┘  │
-│               │                                                 │
-│  ┌────────────▼─────────────────────────────────────────────┐  │
-│  │  Neo4j Client (src/neo4j/)                               │  │
-│  │  • HTTP API connection                                   │  │
-│  │  • Query execution                                       │  │
-│  │  • Result transformation                                 │  │
-│  └────────────┬─────────────────────────────────────────────┘  │
-│               │                                                 │
-│  ┌────────────▼─────────────────────────────────────────────┐  │
-│  │  Storage Layer                                           │  │
-│  │  • D1: Users & Connections (encrypted)                   │  │
-│  │  • KV: Sessions & Cache                                  │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└────────────────────────┬───────────────────────────────────────┘
-                         │ HTTPS (Neo4j HTTP API)
-                         ▼
-┌────────────────────────────────────────────────────────────────┐
-│                   NEO4J AURA (User's DB)                       │
-│  • neo4j+s://xxx.databases.neo4j.io                           │
-│  • User-specific credentials                                   │
-│  • Isolated per user                                          │
-└────────────────────────────────────────────────────────────────┘
++----------------------------------------------------------------+
+|                      CLAUDE.AI CLIENT                          |
+|  MCP Host ejecutando en browser/desktop                        |
++---------------------------+------------------------------------+
+                            | HTTPS POST (JSON-RPC 2.0)
+                            v
++----------------------------------------------------------------+
+|            CLOUDFLARE WORKER (Edge Computing)                  |
+|  +----------------------------------------------------------+  |
+|  |  Entry Point (src/index.ts)                              |  |
+|  |  - CORS handling                                         |  |
+|  |  - Route dispatching                                     |  |
+|  |  - Rate limiting                                         |  |
+|  +------------------------+---------------------------------+  |
+|                           |                                    |
+|  +------------------------v---------------------------------+  |
+|  |  MCP Protocol Layer (src/mcp/)                           |  |
+|  |  - JSON-RPC 2.0 parsing                                  |  |
+|  |  - Method routing (initialize, tools/list, tools/call)   |  |
+|  |  - Error handling                                        |  |
+|  +------------------------+---------------------------------+  |
+|                           |                                    |
+|  +------------------------v---------------------------------+  |
+|  |  Authentication Layer (src/auth/)                        |  |
+|  |  - Token validation                                      |  |
+|  |  - User resolution                                       |  |
+|  |  - Session management (KV)                               |  |
+|  +------------------------+---------------------------------+  |
+|                           |                                    |
+|  +------------------------v---------------------------------+  |
+|  |  Security Layer (src/security/)                          |  |
+|  |  - Query validation                                      |  |
+|  |  - Rate limiting                                         |  |
+|  |  - Audit logging                                         |  |
+|  +------------------------+---------------------------------+  |
+|                           |                                    |
+|  +------------------------v---------------------------------+  |
+|  |  Neo4j Client (src/neo4j/)                               |  |
+|  |  - HTTP API connection                                   |  |
+|  |  - Query execution                                       |  |
+|  |  - Result transformation                                 |  |
+|  +------------------------+---------------------------------+  |
+|                           |                                    |
+|  +------------------------v---------------------------------+  |
+|  |  Storage Layer                                           |  |
+|  |  - D1: Users & Connections (encrypted)                   |  |
+|  |  - KV: Sessions, Cache & Rate Limits                     |  |
+|  +----------------------------------------------------------+  |
++------------------------+---------------------------------------+
+                         | HTTPS (Neo4j HTTP API)
+                         v
++----------------------------------------------------------------+
+|                   NEO4J AURA (User's DB)                       |
+|  - neo4j+s://xxx.databases.neo4j.io                            |
+|  - User-specific credentials                                   |
+|  - Isolated per user                                           |
++----------------------------------------------------------------+
 ```
 
 ### Flujo de una Request MCP
 
 ```
-1. Claude.ai envía:
-   POST /sse
+1. Claude.ai envia:
+   POST /mcp
+   Authorization: Bearer <session_token>
    {
      "jsonrpc": "2.0",
      "id": 1,
      "method": "tools/call",
      "params": {
        "name": "read_neo4j_cypher",
-       "arguments": { "cypher": "MATCH (n) RETURN n LIMIT 5" }
+       "arguments": { "query": "MATCH (n) RETURN n LIMIT 5" }
      }
    }
 
-2. Worker valida token → obtiene user_id
-3. Worker obtiene conexión Neo4j del usuario desde D1
-4. Worker desencripta credenciales
-5. Neo4jClient ejecuta query vía HTTP API
-6. Worker transforma resultados
-7. Worker responde:
+2. Worker aplica rate limiting (KV)
+3. Worker valida token -> obtiene user_id (KV)
+4. Worker obtiene conexion Neo4j del usuario desde D1
+5. Worker desencripta credenciales (AES-256-GCM)
+6. Security layer valida query (bloquea operaciones peligrosas)
+7. Neo4jClient ejecuta query via HTTP API
+8. Worker sanitiza y trunca resultados
+9. Audit log registra operacion
+10. Worker responde:
    {
      "jsonrpc": "2.0",
      "id": 1,
@@ -123,7 +138,7 @@ Protocolo: JSON-RPC 2.0 (MCP spec)
 
 ---
 
-## 📁 Estructura de Archivos del Proyecto
+## Estructura de Archivos del Proyecto
 
 ```
 mcp-neo4j-cypher-cf/
@@ -132,47 +147,80 @@ mcp-neo4j-cypher-cf/
 │   ├── types.ts                 # TypeScript interfaces y types
 │   │
 │   ├── mcp/                     # Capa del protocolo MCP
-│   │   ├── protocol.ts          # Parser y router JSON-RPC 2.0
+│   │   ├── protocol.ts          # Parser JSON-RPC 2.0, routing
 │   │   ├── tools.ts             # Definiciones de herramientas MCP
-│   │   └── handlers.ts          # Lógica de ejecución de tools
+│   │   └── handlers.ts          # Implementacion de herramientas
 │   │
-│   ├── neo4j/                   # Cliente Neo4j
-│   │   ├── client.ts            # Conexión HTTP API
-│   │   ├── schema.ts            # Extracción de schema
-│   │   └── validator.ts         # Validación de queries Cypher
+│   ├── neo4j/                   # Cliente Neo4j HTTP
+│   │   ├── client.ts            # Conexion HTTP API
+│   │   ├── schema.ts            # Extraccion de schema
+│   │   ├── queries.ts           # Ejecucion de queries
+│   │   └── types.ts             # Types especificos Neo4j
 │   │
-│   ├── auth/                    # Autenticación y seguridad
-│   │   ├── session.ts           # Gestión de sesiones
-│   │   ├── crypto.ts            # Encriptación/desencriptación
-│   │   └── middleware.ts        # Middleware de autenticación
+│   ├── auth/                    # Autenticacion y seguridad
+│   │   ├── session.ts           # Gestion de sesiones (KV)
+│   │   ├── crypto.ts            # AES-GCM encrypt/decrypt
+│   │   └── middleware.ts        # Middleware de autenticacion
 │   │
-│   ├── config/                  # Configuración
-│   │   └── ui.ts                # HTML para página de setup
+│   ├── security/                # Seguridad y hardening
+│   │   ├── ratelimit.ts         # Rate limiting (KV)
+│   │   ├── query-validator.ts   # Validacion de queries Cypher
+│   │   ├── audit.ts             # Logging de seguridad
+│   │   └── index.ts             # Re-exports
+│   │
+│   ├── storage/                 # Capa de persistencia
+│   │   ├── users.ts             # CRUD usuarios (D1)
+│   │   ├── connections.ts       # CRUD conexiones (D1)
+│   │   └── cache.ts             # Cache de schema (KV)
+│   │
+│   ├── api/                     # API endpoints
+│   │   ├── setup.ts             # Handlers de configuracion
+│   │   └── tokens.ts            # Gestion de tokens
+│   │
+│   ├── config/                  # Configuracion
+│   │   ├── constants.ts         # Constantes del sistema
+│   │   └── ui.ts                # HTML para pagina de setup
 │   │
 │   └── utils/                   # Utilidades
 │       ├── cors.ts              # Headers CORS
-│       ├── errors.ts            # Error handling
+│       ├── errors.ts            # Clases de error tipadas
+│       ├── sanitize.ts          # Sanitizacion de datos
+│       ├── tokens.ts            # Truncado por tokens
 │       └── logger.ts            # Logging estructurado
 │
-├── test/                        # Tests
+├── test/                        # Tests (144 tests)
+│   ├── setup.ts                 # Mocks para Cloudflare bindings
 │   ├── unit/
-│   │   ├── neo4j.test.ts
-│   │   ├── auth.test.ts
-│   │   └── mcp.test.ts
+│   │   ├── sanitize.test.ts     # 20 tests
+│   │   ├── tokens.test.ts       # 14 tests
+│   │   ├── crypto.test.ts       # 21 tests
+│   │   ├── protocol.test.ts     # 25 tests
+│   │   ├── neo4j-client.test.ts # 11 tests
+│   │   └── security.test.ts     # 38 tests
 │   └── integration/
-│       └── e2e.test.ts
+│       └── mcp.test.ts          # 13 tests
 │
-├── wrangler.toml                # Configuración Cloudflare Workers
+├── docs/                        # Documentacion
+│   ├── DEPLOYMENT.md            # Guia de deploy
+│   ├── SECURITY.md              # Documentacion de seguridad
+│   └── API.md                   # Referencia de API
+│
+├── .github/workflows/           # CI/CD
+│   ├── ci.yml                   # Tests en cada push/PR
+│   ├── deploy-staging.yml       # Deploy automatico a staging
+│   └── deploy-production.yml    # Deploy a produccion
+│
+├── wrangler.toml                # Configuracion Cloudflare Workers
 ├── schema.sql                   # Schema D1 database
 ├── package.json
 ├── tsconfig.json
-├── .env.example                 # Variables de entorno ejemplo
+├── vitest.config.ts             # Configuracion de tests
 └── README.md
 ```
 
 ---
 
-## 🔧 Configuración Inicial
+## Configuracion Inicial
 
 ### Prerequisitos
 
@@ -184,26 +232,23 @@ node --version  # v18.0.0+
 npm install -g wrangler
 wrangler --version
 
-# Autenticación Cloudflare
+# Autenticacion Cloudflare
 wrangler login
 ```
 
 ### Setup del Proyecto
 
 ```bash
-# Crear proyecto
-mkdir mcp-neo4j-cypher-cf
+# Clonar proyecto
+git clone <repository-url>
 cd mcp-neo4j-cypher-cf
-
-# Inicializar Wrangler
-wrangler init
 
 # Instalar dependencias
 npm install
 
 # Crear infraestructura Cloudflare
 wrangler d1 create mcp-neo4j-users
-wrangler kv:namespace create "NEO4J_SESSIONS"
+wrangler kv:namespace create "SESSIONS"
 
 # Aplicar schema D1
 wrangler d1 execute mcp-neo4j-users --file=schema.sql --remote
@@ -214,26 +259,22 @@ openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
 
 ### Variables de Entorno
 
-Copiar `.env.example` a `.env.local`:
+Configurar en `wrangler.toml`:
 
-```bash
-# Cloudflare Account
-CLOUDFLARE_ACCOUNT_ID=your_account_id
-CLOUDFLARE_API_TOKEN=your_api_token
+```toml
+[vars]
+ENVIRONMENT = "development"
+DEFAULT_READ_TIMEOUT = "30"
+DEFAULT_TOKEN_LIMIT = "10000"
+DEFAULT_SCHEMA_SAMPLE = "1000"
 
-# D1 Database
-D1_DATABASE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-# KV Namespace
-KV_NAMESPACE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Secrets (usar wrangler secret put)
-# ENCRYPTION_KEY=<generated>
+# Secrets (usar wrangler secret put):
+# - ENCRYPTION_KEY
 ```
 
 ---
 
-## 💻 Guías de Desarrollo
+## Guias de Desarrollo
 
 ### Comandos Principales
 
@@ -241,7 +282,7 @@ KV_NAMESPACE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # Desarrollo local con live reload
 npm run dev
 
-# Deploy a producción
+# Deploy a produccion
 npm run deploy
 
 # Ver logs en tiempo real
@@ -261,10 +302,10 @@ npm run typecheck
 wrangler d1 execute mcp-neo4j-users --local --command="SELECT * FROM users"
 
 # Ver datos en KV
-wrangler kv:key get "session:xxxxx" --binding=NEO4J_SESSIONS
+wrangler kv:key list --binding=SESSIONS
 ```
 
-### Workflow de Desarrollo Típico
+### Workflow de Desarrollo Tipico
 
 1. **Crear nueva feature:**
    ```bash
@@ -280,7 +321,7 @@ wrangler kv:key get "session:xxxxx" --binding=NEO4J_SESSIONS
 3. **Probar cambios:**
    ```bash
    npm test
-   curl -X POST http://localhost:8787/sse \
+   curl -X POST http://localhost:8787/mcp \
      -H "Content-Type: application/json" \
      -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
    ```
@@ -290,21 +331,21 @@ wrangler kv:key get "session:xxxxx" --binding=NEO4J_SESSIONS
    wrangler deploy --env staging
    ```
 
-5. **Deploy a producción:**
+5. **Deploy a produccion:**
    ```bash
    wrangler deploy
    ```
 
 ---
 
-## 🎯 Patrones de Código y Convenciones
+## Patrones de Codigo y Convenciones
 
 ### TypeScript Types
 
-**SIEMPRE** definir tipos explícitos. NO usar `any`.
+**SIEMPRE** definir tipos explicitos. NO usar `any`.
 
 ```typescript
-// ✅ CORRECTO
+// CORRECTO
 interface Neo4jConnection {
   id: string;
   user_id: string;
@@ -317,17 +358,13 @@ async function getConnection(userId: string, env: Env): Promise<Neo4jConnection 
   const result = await env.DB.prepare(
     'SELECT * FROM connections WHERE user_id = ?'
   ).bind(userId).first();
-  
+
   return result as Neo4jConnection | null;
 }
 
-// ❌ INCORRECTO
+// INCORRECTO
 async function getConnection(userId: any, env: any): Promise<any> {
-  const result = await env.DB.prepare(
-    'SELECT * FROM connections WHERE user_id = ?'
-  ).bind(userId).first();
-  
-  return result;
+  // NO hacer esto
 }
 ```
 
@@ -351,21 +388,11 @@ export class AuthenticationError extends Error {
   }
 }
 
-// Uso:
-try {
-  const result = await neo4jClient.query(cypher);
-} catch (error) {
-  if (error instanceof Neo4jConnectionError) {
-    return new Response(JSON.stringify({
-      jsonrpc: '2.0',
-      id: requestId,
-      error: {
-        code: -32001,
-        message: 'Failed to connect to Neo4j'
-      }
-    }), { status: 500 });
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
   }
-  throw error;
 }
 ```
 
@@ -374,14 +401,14 @@ try {
 **SIEMPRE** usar async/await, NUNCA `.then()`:
 
 ```typescript
-// ✅ CORRECTO
+// CORRECTO
 async function fetchData(url: string): Promise<Data> {
   const response = await fetch(url);
   const data = await response.json();
   return data;
 }
 
-// ❌ INCORRECTO
+// INCORRECTO - No usar .then()
 function fetchData(url: string): Promise<Data> {
   return fetch(url)
     .then(response => response.json())
@@ -395,22 +422,17 @@ Usar logging estructurado:
 
 ```typescript
 // src/utils/logger.ts
-export function log(level: 'info' | 'warn' | 'error', message: string, metadata?: any) {
-  const entry = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    ...metadata
-  };
-  console.log(JSON.stringify(entry));
-}
+export function info(message: string, metadata?: Record<string, unknown>): void;
+export function warn(message: string, metadata?: Record<string, unknown>): void;
+export function error(message: string, metadata?: Record<string, unknown>): void;
+export function debug(message: string, metadata?: Record<string, unknown>): void;
 
 // Uso:
-log('info', 'User authenticated', { userId: user.id });
-log('error', 'Neo4j query failed', { 
-  userId: user.id, 
-  cypher: query,
-  error: error.message 
+logger.info('User authenticated', { userId: user.id });
+logger.error('Neo4j query failed', {
+  userId: user.id,
+  query: query.substring(0, 100),
+  error: error.message
 });
 ```
 
@@ -419,208 +441,112 @@ log('error', 'Neo4j query failed', {
 NUNCA hardcodear secrets:
 
 ```typescript
-// ✅ CORRECTO
+// CORRECTO
 const encryptionKey = env.ENCRYPTION_KEY;
 const encrypted = await encrypt(data, encryptionKey);
 
-// ❌ INCORRECTO
+// INCORRECTO
 const encrypted = await encrypt(data, 'my-secret-key-12345');
 ```
 
 ---
 
-## 🔒 Consideraciones de Seguridad
+## Seguridad
 
-### Encriptación de Credenciales
+### Encriptacion de Credenciales
 
-Las credenciales Neo4j DEBEN estar encriptadas en D1:
+Las credenciales Neo4j se encriptan con AES-256-GCM antes de almacenar en D1:
 
 ```typescript
-// Al guardar:
-const encryptedUri = encrypt(uri, env.ENCRYPTION_KEY);
-const encryptedUser = encrypt(user, env.ENCRYPTION_KEY);
-const encryptedPassword = encrypt(password, env.ENCRYPTION_KEY);
+// src/auth/crypto.ts
+export async function encrypt(plaintext: string, key: string): Promise<string>;
+export async function decrypt(ciphertext: string, key: string): Promise<string>;
 
-await env.DB.prepare(`
-  INSERT INTO connections (neo4j_uri, neo4j_user, neo4j_password)
-  VALUES (?, ?, ?)
-`).bind(encryptedUri, encryptedUser, encryptedPassword).run();
-
-// Al leer:
-const connection = await env.DB.prepare('SELECT * FROM connections WHERE id = ?')
-  .bind(connectionId).first();
-
-const uri = decrypt(connection.neo4j_uri, env.ENCRYPTION_KEY);
-const user = decrypt(connection.neo4j_user, env.ENCRYPTION_KEY);
-const password = decrypt(connection.neo4j_password, env.ENCRYPTION_KEY);
+// Formato almacenado: iv:ciphertext (base64)
+// IV unico de 12 bytes por cada encriptacion
 ```
 
-### Validación de Queries Cypher
+### Validacion de Queries Cypher
 
-Validar queries ANTES de ejecutar:
+El sistema bloquea operaciones peligrosas automaticamente:
 
 ```typescript
-// src/neo4j/validator.ts
-export function validateReadQuery(cypher: string): boolean {
-  const normalized = cypher.trim().toLowerCase();
-  
-  // Solo permitir queries de lectura
-  const readOnlyPattern = /^(match|return|with|unwind|call\s+{)/;
-  if (!readOnlyPattern.test(normalized)) {
-    return false;
-  }
-  
-  // Bloquear operaciones de escritura
-  const writePatterns = ['create', 'merge', 'delete', 'set', 'remove'];
-  for (const pattern of writePatterns) {
-    if (normalized.includes(pattern)) {
-      return false;
-    }
-  }
-  
-  return true;
-}
+// src/security/query-validator.ts
+// Operaciones bloqueadas:
+- DROP DATABASE, DROP CONSTRAINT, DROP INDEX
+- CREATE USER, ALTER USER, DROP USER
+- GRANT, REVOKE, DENY
+- CALL dbms.* (procedures del sistema)
+- LOAD CSV desde URLs remotas (http://, https://, ftp://)
 
-// Uso:
-if (!validateReadQuery(cypher)) {
-  throw new Error('Invalid read query. Use write_neo4j_cypher for write operations.');
-}
+// Validaciones adicionales:
+- Longitud maxima: 100KB
+- Warning para queries sin LIMIT
+- Sanitizacion de parametros
 ```
 
 ### Rate Limiting
 
-Implementar rate limiting por usuario:
+Implementado con fixed window algorithm en KV:
 
 ```typescript
-async function checkRateLimit(userId: string, env: Env): Promise<boolean> {
-  const minute = Math.floor(Date.now() / 60000);
-  const key = `rate:${userId}:${minute}`;
-  
-  const count = await env.SESSIONS.get(key);
-  const currentCount = count ? parseInt(count) : 0;
-  
-  if (currentCount >= 100) {
-    throw new Error('Rate limit exceeded. Max 100 requests per minute.');
-  }
-  
-  await env.SESSIONS.put(key, String(currentCount + 1), {
-    expirationTtl: 60
-  });
-  
-  return true;
+// src/security/ratelimit.ts
+// Configuracion default: 100 requests por minuto
+// Identificacion: userId > CF-Connecting-IP > X-Forwarded-For
+
+// Headers de respuesta:
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 45
+
+// Respuesta 429 si excede:
+{
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded. Try again in 45 seconds.",
+  "retryAfter": 45
 }
+```
+
+### Audit Logging
+
+Eventos registrados automaticamente:
+
+```typescript
+// src/security/audit.ts
+// Eventos:
+- auth_success, auth_failure, session_expired
+- rate_limit_exceeded
+- query_executed, query_blocked
+- setup_attempt, setup_success, setup_failure
+- suspicious_activity
+
+// Formato JSON estructurado con:
+- timestamp, eventType, requestId
+- userId, clientIp, userAgent
+- Datos sensibles enmascarados
 ```
 
 ### CORS Seguro
 
 ```typescript
 // src/utils/cors.ts
-export function getCorsHeaders(origin: string | null): Record<string, string> {
-  // En producción, validar origin contra whitelist
-  const allowedOrigins = [
-    'https://claude.ai',
-    'https://www.claude.ai'
-  ];
-  
-  const corsOrigin = (origin && allowedOrigins.includes(origin)) 
-    ? origin 
-    : 'https://claude.ai';
-  
-  return {
-    'Access-Control-Allow-Origin': corsOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400'
-  };
-}
+// Origenes permitidos por defecto:
+- https://claude.ai
+- https://www.claude.ai
+
+// Configurable via ALLOWED_ORIGINS en wrangler.toml
 ```
 
 ---
 
-## 🧪 Testing
+## Testing
 
-### Unit Tests
+### Framework: Vitest
 
-```typescript
-// test/unit/neo4j.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { Neo4jClient } from '../../src/neo4j/client';
-
-describe('Neo4jClient', () => {
-  let client: Neo4jClient;
-  
-  beforeEach(() => {
-    const mockConnection = {
-      neo4j_uri: 'neo4j+s://test.databases.neo4j.io',
-      neo4j_user: 'neo4j',
-      neo4j_password: 'password',
-      neo4j_database: 'neo4j'
-    };
-    
-    const mockEnv = {
-      ENCRYPTION_KEY: 'test-key'
-    };
-    
-    client = new Neo4jClient(mockConnection, mockEnv);
-  });
-  
-  it('should convert Neo4j URI to HTTP URL', () => {
-    expect(client['getHttpUrl']()).toBe('https://test.databases.neo4j.io');
-  });
-  
-  it('should handle query errors gracefully', async () => {
-    await expect(client.query('INVALID QUERY')).rejects.toThrow();
-  });
-});
-```
-
-### Integration Tests
-
-```typescript
-// test/integration/e2e.test.ts
-import { describe, it, expect } from 'vitest';
-
-describe('MCP Protocol E2E', () => {
-  const baseUrl = 'http://localhost:8787';
-  
-  it('should handle initialize request', async () => {
-    const response = await fetch(`${baseUrl}/sse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize'
-      })
-    });
-    
-    const data = await response.json();
-    expect(data.result.protocolVersion).toBe('2024-11-05');
-    expect(data.result.serverInfo.name).toBe('mcp-neo4j-cypher');
-  });
-  
-  it('should list available tools', async () => {
-    const response = await fetch(`${baseUrl}/sse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/list'
-      })
-    });
-    
-    const data = await response.json();
-    expect(data.result.tools).toHaveLength(3);
-    expect(data.result.tools[0].name).toBe('get_neo4j_schema');
-  });
-});
-```
-
-### Ejecutar Tests
+**Total: 144 tests pasando**
 
 ```bash
-# Todos los tests
+# Ejecutar todos los tests
 npm test
 
 # Con coverage
@@ -629,206 +555,114 @@ npm test -- --coverage
 # Watch mode
 npm test -- --watch
 
-# Específico
-npm test -- test/unit/neo4j.test.ts
+# Test especifico
+npm test -- test/unit/security.test.ts
+```
+
+### Estructura de Tests
+
+| Archivo | Tests | Descripcion |
+|---------|-------|-------------|
+| `sanitize.test.ts` | 20 | Sanitizacion de datos |
+| `tokens.test.ts` | 14 | Truncado por tokens |
+| `crypto.test.ts` | 21 | Encriptacion AES-GCM |
+| `protocol.test.ts` | 25 | Parser JSON-RPC 2.0 |
+| `neo4j-client.test.ts` | 11 | Cliente Neo4j HTTP |
+| `security.test.ts` | 38 | Rate limit, query validation |
+| `mcp.test.ts` | 13 | Integracion MCP |
+
+### Mocks
+
+```typescript
+// test/setup.ts
+// Mocks para Cloudflare bindings:
+- KVNamespace (get, put, delete, list)
+- D1Database (prepare, bind, first, all, run)
 ```
 
 ---
 
-## 📊 Monitoreo y Debugging
-
-### Logs Estructurados
-
-```typescript
-// Implementar logging consistente
-function logRequest(request: Request, userId: string, duration: number) {
-  console.log(JSON.stringify({
-    type: 'request',
-    timestamp: new Date().toISOString(),
-    userId,
-    method: request.method,
-    url: request.url,
-    duration
-  }));
-}
-
-function logError(error: Error, context: any) {
-  console.error(JSON.stringify({
-    type: 'error',
-    timestamp: new Date().toISOString(),
-    error: {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    },
-    context
-  }));
-}
-```
-
-### Métricas Clave
-
-```typescript
-// Trackear métricas importantes
-interface Metrics {
-  requests_total: number;
-  requests_success: number;
-  requests_error: number;
-  neo4j_queries_total: number;
-  neo4j_queries_duration_ms: number[];
-  cache_hits: number;
-  cache_misses: number;
-}
-
-// Guardar métricas en KV cada minuto
-async function saveMetrics(metrics: Metrics, env: Env) {
-  const key = `metrics:${Math.floor(Date.now() / 60000)}`;
-  await env.SESSIONS.put(key, JSON.stringify(metrics), {
-    expirationTtl: 86400 // 24 horas
-  });
-}
-```
-
-### Debugging Local
-
-```bash
-# Ver logs en tiempo real
-npm run tail
-
-# Consultar D1 local
-wrangler d1 execute mcp-neo4j-users --local \
-  --command="SELECT * FROM users LIMIT 10"
-
-# Ver sesiones en KV
-wrangler kv:key list --binding=NEO4J_SESSIONS
-
-# Inspeccionar request/response
-curl -v -X POST http://localhost:8787/sse \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
-```
-
----
-
-## 🚀 Deploy y CI/CD
+## Deploy y CI/CD
 
 ### Ambientes
 
-Configurar múltiples ambientes en `wrangler.toml`:
+| Ambiente | Worker | URL |
+|----------|--------|-----|
+| Staging | `mcp-neo4j-cypher-staging` | `*.workers.dev` |
+| Produccion | `mcp-neo4j-cypher` | `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev` |
 
-```toml
-name = "mcp-neo4j-cypher"
+### Recursos Cloudflare
 
-[env.staging]
-name = "mcp-neo4j-cypher-staging"
-vars = { ENVIRONMENT = "staging" }
+**Produccion:**
+- D1 Database: `mcp-neo4j-users-prod` (ID: `40e22b7e-96ca-453d-9263-8fcfa61df034`)
+- KV Namespace: `SESSIONS` (ID: `dfd68ab532eb4ccb82289c310eb089af`)
 
-[env.production]
-name = "mcp-neo4j-cypher"
-vars = { ENVIRONMENT = "production" }
-```
+**Staging:**
+- D1 Database: `mcp-neo4j-users-staging` (ID: `b0afd894-f058-4b38-9593-021dc5e1f79e`)
+- KV Namespace: `SESSIONS` (ID: `6273d16c007743598a144f6443872e7a`)
 
-Deploy:
+### GitHub Actions (CI/CD)
+
+| Workflow | Trigger | Accion |
+|----------|---------|--------|
+| `ci.yml` | Push/PR a main | Tests + typecheck |
+| `deploy-staging.yml` | Push a main | Deploy automatico a staging |
+| `deploy-production.yml` | Manual/Release | Deploy a produccion |
+
+**Requisito:** Configurar `CLOUDFLARE_API_TOKEN` en GitHub repository secrets.
+
+### Deploy Manual
+
 ```bash
 # Staging
 wrangler deploy --env staging
 
 # Production
-wrangler deploy --env production
-```
-
-### GitHub Actions (CI/CD)
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy to Cloudflare Workers
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - run: npm ci
-      - run: npm test
-      - run: npm run lint
-      - run: npm run typecheck
-  
-  deploy-staging:
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env staging
-  
-  deploy-production:
-    needs: deploy-staging
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v3
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env production
+wrangler deploy
 ```
 
 ---
 
-## 🎯 Roadmap y TODOs
+## Estado del Proyecto
 
-### Fase 1: MVP (Actual)
-- [x] Protocolo MCP básico
-- [x] Autenticación con tokens
-- [x] Cliente Neo4j HTTP
-- [x] 3 herramientas: schema, read, write
-- [x] UI de configuración
-- [ ] Encriptación AES-GCM real
-- [ ] Tests completos
+### Fases Completadas
 
-### Fase 2: Producción
-- [ ] OAuth 2.1 (Google/GitHub)
-- [ ] Rate limiting robusto
-- [ ] Logging estructurado
-- [ ] Métricas y monitoring
-- [ ] Error tracking (Sentry)
-- [ ] Documentación API
+| Fase | Descripcion | Estado |
+|------|-------------|--------|
+| 1 | Fundamentos (MVP Core) | Completado |
+| 2 | Protocolo MCP | Completado |
+| 3 | Cliente Neo4j HTTP | Completado |
+| 4 | Sanitizacion y Tokens | Completado |
+| 5 | Autenticacion y Storage | Completado |
+| 6 | Integracion Completa | Completado |
+| 7 | UI de Configuracion | Completado |
+| 8 | Testing (144 tests) | Completado |
+| 9 | Seguridad y Hardening | Completado |
+| 10 | Documentacion y Deploy | Completado |
 
-### Fase 3: Optimización
-- [ ] Caché inteligente de schema
-- [ ] Query optimization
-- [ ] Connection pooling
-- [ ] Batch operations
-- [ ] WebSocket transport
+### Roadmaps
 
-### Fase 4: Features Avanzadas
-- [ ] Multi-database por usuario
-- [ ] Query history
-- [ ] Scheduled queries
-- [ ] Data export/import
-- [ ] Admin dashboard
+- **Completados:** `roadmaps/Roadmap_v1.md` - Implementacion inicial
+- **En progreso:** `Roadmap_v2.md` - Optimizacion de operaciones KV
+
+### Proximas Mejoras (Roadmap v2)
+
+- [ ] Reducir operaciones KV por request
+- [ ] Cache in-memory del Worker
+- [ ] Optimizacion de rate limiting
+
+### Features Futuras (No planificadas)
+
+- OAuth 2.1 (Google/GitHub)
+- Multi-database por usuario
+- Query history
+- Admin dashboard
 
 ---
 
-## 📚 Referencias y Recursos
+## Referencias y Recursos
 
-### Documentación Oficial
+### Documentacion Oficial
 
 - [Model Context Protocol Spec](https://modelcontextprotocol.io/docs/specification)
 - [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
@@ -837,74 +671,27 @@ jobs:
 - [Neo4j HTTP API](https://neo4j.com/docs/http-api/current/)
 - [Neo4j Aura](https://neo4j.com/cloud/aura/)
 
-### Tools y Librerías
+### Documentacion del Proyecto
 
-- [Wrangler CLI](https://github.com/cloudflare/workers-sdk)
-- [Vitest](https://vitest.dev/) - Testing framework
-- [TypeScript](https://www.typescriptlang.org/)
-- [ESLint](https://eslint.org/)
-- [Prettier](https://prettier.io/)
-
-### MCP Servers Relacionados
-
-- [mcp-neo4j (oficial)](https://github.com/neo4j-contrib/mcp-neo4j)
-- [mcp-neo4j-memory](https://github.com/neo4j-contrib/mcp-neo4j/tree/main/servers/mcp-neo4j-memory)
-- [mcp-neo4j-cloud-aura-api](https://github.com/neo4j-contrib/mcp-neo4j/tree/main/servers/mcp-neo4j-cloud-aura-api)
+- `docs/DEPLOYMENT.md` - Guia completa de deploy
+- `docs/SECURITY.md` - Medidas de seguridad
+- `docs/API.md` - Referencia de API
 
 ---
 
-## 🤝 Contribución
-
-### Proceso de Desarrollo
-
-1. **Fork y clone** el repositorio
-2. **Crear branch** para feature/bugfix
-3. **Desarrollar** siguiendo convenciones
-4. **Escribir tests** para nuevo código
-5. **Commit** con mensajes descriptivos
-6. **Push** y abrir Pull Request
-7. **Code review** y merge
-
-### Commit Messages
-
-Seguir [Conventional Commits](https://www.conventionalcommits.org/):
-
-```bash
-feat: add query validation for read operations
-fix: correct Neo4j URI parsing for Aura instances
-docs: update setup instructions
-test: add unit tests for auth middleware
-refactor: simplify error handling in MCP protocol
-perf: implement schema caching with 5min TTL
-chore: update dependencies
-```
-
-### Code Review Checklist
-
-- [ ] Código sigue convenciones del proyecto
-- [ ] Tests incluidos y pasando
-- [ ] TypeScript types correctos (no `any`)
-- [ ] Errores manejados apropiadamente
-- [ ] Logging implementado
-- [ ] Documentación actualizada
-- [ ] Sin secrets hardcodeados
-- [ ] Performance considerado
-
----
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Errores Comunes
 
 **Error:** `D1_ERROR: no such table: users`
 ```bash
-# Solución: Aplicar schema
+# Solucion: Aplicar schema
 wrangler d1 execute mcp-neo4j-users --file=schema.sql --remote
 ```
 
 **Error:** `KV binding 'SESSIONS' not found`
 ```bash
-# Solución: Verificar wrangler.toml tiene el binding correcto
+# Solucion: Verificar wrangler.toml tiene el binding correcto
 [[kv_namespaces]]
 binding = "SESSIONS"
 id = "tu_namespace_id"
@@ -912,97 +699,74 @@ id = "tu_namespace_id"
 
 **Error:** `Neo4j HTTP Error: 401 Unauthorized`
 ```bash
-# Solución: Verificar credenciales Neo4j
-# Las credenciales están encriptadas en D1
+# Solucion: Verificar credenciales Neo4j
+# Las credenciales estan encriptadas en D1
 # Revisar que ENCRYPTION_KEY no haya cambiado
 ```
 
 **Error:** `TypeError: env.ENCRYPTION_KEY is undefined`
 ```bash
-# Solución: Configurar secret
+# Solucion: Configurar secret
 openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
 ```
 
-### Debugging Tips
-
-1. **Usar wrangler tail para logs en tiempo real**
-2. **Inspeccionar requests con curl -v**
-3. **Verificar D1 data directamente**
-4. **Comprobar KV values**
-5. **Revisar métricas en Cloudflare Dashboard**
+**Error:** `Query blocked for security reasons`
+```bash
+# La query contiene operaciones bloqueadas (DROP, GRANT, etc.)
+# Ver docs/SECURITY.md para lista completa
+```
 
 ---
 
-## 💡 Tips para Claude Code
+## Tips para Claude Code
 
 ### Cuando trabajes en este proyecto:
 
 1. **SIEMPRE** lee este Claude.md primero para entender el contexto
-2. **SIGUE** las convenciones de código establecidas
-3. **USA** TypeScript strict mode sin `any`
-4. **IMPLEMENTA** tests para nuevo código
-5. **DOCUMENTA** funciones complejas con JSDoc
+2. **CONSULTA** el roadmap activo para saber que se esta implementando
+3. **SIGUE** las convenciones de codigo establecidas
+4. **USA** TypeScript strict mode sin `any`
+5. **IMPLEMENTA** tests para nuevo codigo
 6. **VALIDA** inputs antes de procesar
 7. **MANEJA** errores apropiadamente
-8. **LOGA** operaciones importantes
+8. **LOGA** operaciones importantes con audit
 9. **CONSIDERA** seguridad en cada cambio
-10. **PREGUNTA** si algo no está claro
+10. **PREGUNTA** si algo no esta claro
 
-### Prompts Útiles para Claude Code
+### Estructura de Documentacion
 
-```bash
-# Implementar nueva herramienta MCP
-"Añade una nueva herramienta MCP llamada 'get_neo4j_indexes' que liste 
-todos los índices de la base de datos. Sigue el patrón de las herramientas 
-existentes en src/mcp/tools.ts y handlers.ts"
-
-# Debugging
-"Analiza por qué la query Cypher está fallando con error 'Invalid syntax'. 
-El código está en src/neo4j/client.ts línea 45"
-
-# Refactoring
-"Refactoriza src/auth/crypto.ts para usar Web Crypto API con AES-GCM 
-en lugar de btoa/atob. Mantén la misma interfaz pública"
-
-# Testing
-"Crea tests unitarios para Neo4jClient en test/unit/neo4j.test.ts. 
-Mockea las llamadas fetch usando vitest"
-
-# Documentation
-"Documenta la función getSchema() en src/neo4j/schema.ts con JSDoc, 
-explicando parámetros, retorno y ejemplos de uso"
+```
+Claude.md           <- Este archivo (contexto principal)
+Roadmap_v2.md       <- Roadmap activo en implementacion
+roadmaps/           <- Roadmaps completados
+  Roadmap_v1.md     <- Implementacion inicial (completado)
+docs/               <- Documentacion tecnica
+  DEPLOYMENT.md
+  SECURITY.md
+  API.md
 ```
 
 ---
 
-## 📝 Notas Adicionales
-
-### Limitaciones Conocidas
+## Limitaciones Conocidas
 
 1. **No WebSocket en Workers** - Por eso usamos HTTP/SSE
 2. **No Bolt Protocol** - Neo4j Driver requiere TCP, usamos HTTP API
-3. **Cold starts** - Primera request puede ser más lenta
-4. **CPU limit** - Workers tienen límite de 50ms CPU time (pero I/O no cuenta)
+3. **Cold starts** - Primera request puede ser mas lenta
+4. **CPU limit** - Workers tienen limite de 50ms CPU time (pero I/O no cuenta)
 5. **Memory limit** - 128MB por request
-
-### Best Practices Específicas
-
-1. **Minimizar CPU usage** - Cloudflare cobra por CPU time
-2. **Usar KV para caché** - Reduce calls a D1 y Neo4j
-3. **Batch operations** - Agrupar queries cuando sea posible
-4. **Async todo** - No bloquear el event loop
-5. **Validar early** - Fallar rápido en validación
+6. **KV eventually consistent** - Doble verificacion de expiracion implementada
 
 ### Performance Tips
 
 - Schema caching: 5 minutos en KV
-- Session validation: 1 minuto en KV
-- Connection pooling: No disponible, optimizar requests
+- Session validation: En KV con TTL 24h
+- Rate limiting: Fixed window en KV
 - Query timeouts: 30 segundos default
-- Rate limiting: 100 req/min por usuario
+- Rate limit: 100 req/min por usuario
 
 ---
 
-**Última actualización:** Diciembre 2024  
-**Versión:** 1.0  
-**Mantenedor:** Claude Code + Antonio
+**Ultima actualizacion:** Enero 2025
+**Version:** 2.0
+**Mantenedor:** Claude Code + Usuario
