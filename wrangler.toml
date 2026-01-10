@@ -3,7 +3,7 @@ name = "mcp-neo4j-cypher"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
-account_id = "fbe074a4d149441eb68832d5b116cbf6"
+account_id = "e1a6f9414e9b47f056d1731ab791f4db"
 
 # Development settings
 [dev]
@@ -45,11 +45,11 @@ ALLOWED_ORIGINS = "https://claude.ai,https://www.claude.ai"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "mcp-neo4j-users-staging"
-database_id = "b0afd894-f058-4b38-9593-021dc5e1f79e"
+database_id = "86365e3f-ce97-4708-be5f-1dec9830055f"
 
 [[env.staging.kv_namespaces]]
 binding = "SESSIONS"
-id = "6273d16c007743598a144f6443872e7a"
+id = "e6434d88904c4f09b457d934841719ac"
 
 # ============================================
 # Production Environment
@@ -67,11 +67,11 @@ ALLOWED_ORIGINS = "https://claude.ai,https://www.claude.ai"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "mcp-neo4j-users-prod"
-database_id = "40e22b7e-96ca-453d-9263-8fcfa61df034"
+database_id = "5493f001-14a4-496a-bfc5-60a24ceb7101"
 
 [[env.production.kv_namespaces]]
 binding = "SESSIONS"
-id = "dfd68ab532eb4ccb82289c310eb089af"
+id = "babfaa9da1d147069b6a0e2b7328c2ca"
 
 # ============================================
 # Secrets (configure via wrangler secret put)

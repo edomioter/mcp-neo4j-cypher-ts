@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev
+      url: https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
       - name: Run Smoke Tests on Staging
         run: |
           chmod +x ./test/staging/smoke-tests.sh
-          STAGING_URL="https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev" ./test/staging/smoke-tests.sh
+          STAGING_URL="https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev" ./test/staging/smoke-tests.sh
 
   deploy-production:
     name: Deploy to Production
@@ -90,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev
+      url: https://mcp-neo4j-cypher.ops-e1a.workers.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,13 +115,13 @@ jobs:
       - name: Run Smoke Tests on Production
         run: |
           chmod +x ./test/staging/smoke-tests.sh
-          STAGING_URL="https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev" ./test/staging/smoke-tests.sh
+          STAGING_URL="https://mcp-neo4j-cypher.ops-e1a.workers.dev" ./test/staging/smoke-tests.sh
 
       - name: Deployment Summary
         run: |
           echo "## 🚀 Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** https://mcp-neo4j-cypher.ops-e1a.workers.dev" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -137,7 +137,7 @@ jobs:
         run: |
           if [ "${{ needs.deploy-production.result }}" == "success" ]; then
             echo "✅ Production deployment successful!"
-            echo "URL: https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev"
+            echo "URL: https://mcp-neo4j-cypher.ops-e1a.workers.dev"
           else
             echo "❌ Production deployment failed!"
             exit 1

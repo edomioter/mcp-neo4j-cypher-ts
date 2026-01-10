@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev
+      url: https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
       - name: Run Smoke Tests
         run: |
           chmod +x ./test/staging/smoke-tests.sh
-          STAGING_URL="https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev" ./test/staging/smoke-tests.sh
+          STAGING_URL="https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev" ./test/staging/smoke-tests.sh
         continue-on-error: false
 
   notify:
@@ -76,7 +76,7 @@ jobs:
         run: |
           if [ "${{ needs.deploy.result }}" == "success" ]; then
             echo "✅ Staging deployment successful!"
-            echo "URL: https://mcp-neo4j-cypher-staging.eduardodominguezotero.workers.dev"
+            echo "URL: https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev"
           else
             echo "❌ Staging deployment failed!"
             exit 1
