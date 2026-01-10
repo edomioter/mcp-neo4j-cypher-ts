@@ -19,7 +19,7 @@ Usuario: "Muestrame 5 peliculas"
 Claude: [Usa read_neo4j_cypher] MATCH (m:Movie)... [Resultados]
 ```
 
-**URL Produccion:** `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev`
+**URL Produccion:** `https://mcp-neo4j-cypher.ops-e1a.workers.dev`
 
 ---
 
@@ -588,18 +588,18 @@ npm test -- test/unit/security.test.ts
 
 | Ambiente | Worker | URL |
 |----------|--------|-----|
-| Staging | `mcp-neo4j-cypher-staging` | `*.workers.dev` |
-| Produccion | `mcp-neo4j-cypher` | `https://mcp-neo4j-cypher.eduardodominguezotero.workers.dev` |
+| Staging | `mcp-neo4j-cypher-staging` | `https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev` |
+| Produccion | `mcp-neo4j-cypher` | `https://mcp-neo4j-cypher.ops-e1a.workers.dev` |
 
 ### Recursos Cloudflare
 
 **Produccion:**
-- D1 Database: `mcp-neo4j-users-prod` (ID: `40e22b7e-96ca-453d-9263-8fcfa61df034`)
-- KV Namespace: `SESSIONS` (ID: `dfd68ab532eb4ccb82289c310eb089af`)
+- D1 Database: `mcp-neo4j-users-prod` (ID: `5493f001-14a4-496a-bfc5-60a24ceb7101`)
+- KV Namespace: `SESSIONS` (ID: `babfaa9da1d147069b6a0e2b7328c2ca`)
 
 **Staging:**
-- D1 Database: `mcp-neo4j-users-staging` (ID: `b0afd894-f058-4b38-9593-021dc5e1f79e`)
-- KV Namespace: `SESSIONS` (ID: `6273d16c007743598a144f6443872e7a`)
+- D1 Database: `mcp-neo4j-users-staging` (ID: `86365e3f-ce97-4708-be5f-1dec9830055f`)
+- KV Namespace: `SESSIONS` (ID: `e6434d88904c4f09b457d934841719ac`)
 
 ### GitHub Actions (CI/CD)
 
