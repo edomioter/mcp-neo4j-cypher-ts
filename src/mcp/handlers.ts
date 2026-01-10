@@ -246,6 +246,7 @@ async function executeGetSchema(
       JSON.stringify({
         error: 'Schema extraction failed',
         message: error instanceof Error ? error.message : String(error),
+        version: 'v2-fix-2026-01-10',
       }, null, 2),
       true
     );
