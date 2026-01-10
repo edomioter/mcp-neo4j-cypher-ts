@@ -30,6 +30,28 @@ binding = "SESSIONS"
 id = "placeholder-replace-with-actual-id"
 
 # ============================================
+# Development Environment
+# ============================================
+[env.dev]
+name = "mcp-neo4j-cypher-dev"
+
+[env.dev.vars]
+ENVIRONMENT = "dev"
+DEFAULT_READ_TIMEOUT = "30"
+DEFAULT_TOKEN_LIMIT = "10000"
+DEFAULT_SCHEMA_SAMPLE = "1000"
+ALLOWED_ORIGINS = "https://claude.ai,https://www.claude.ai"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "mcp-neo4j-users-dev"
+database_id = "e8e6fc3f-673a-4698-a4d7-8fe964cd87ae"
+
+[[env.dev.kv_namespaces]]
+binding = "SESSIONS"
+id = "29f46c6580a34c0e9af149901e0e1101"
+
+# ============================================
 # Staging Environment
 # ============================================
 [env.staging]
