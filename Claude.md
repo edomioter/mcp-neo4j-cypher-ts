@@ -586,10 +586,11 @@ npm test -- test/unit/security.test.ts
 
 ### Ambientes
 
-| Ambiente | Worker | URL |
-|----------|--------|-----|
-| Staging | `mcp-neo4j-cypher-staging` | `https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev` |
-| Produccion | `mcp-neo4j-cypher` | `https://mcp-neo4j-cypher.ops-e1a.workers.dev` |
+| Ambiente | Worker | Rama | URL |
+|----------|--------|------|-----|
+| Dev | `mcp-neo4j-cypher-dev` | `develop` | `https://mcp-neo4j-cypher-dev.ops-e1a.workers.dev` |
+| Staging | `mcp-neo4j-cypher-staging` | `main` | `https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev` |
+| Produccion | `mcp-neo4j-cypher` | manual | `https://mcp-neo4j-cypher.ops-e1a.workers.dev` |
 
 ### Recursos Cloudflare
 
@@ -601,11 +602,16 @@ npm test -- test/unit/security.test.ts
 - D1 Database: `mcp-neo4j-users-staging` (ID: `86365e3f-ce97-4708-be5f-1dec9830055f`)
 - KV Namespace: `SESSIONS` (ID: `e6434d88904c4f09b457d934841719ac`)
 
+**Dev:**
+- D1 Database: `mcp-neo4j-users-dev` (ID: `e8e6fc3f-673a-4698-a4d7-8fe964cd87ae`)
+- KV Namespace: `SESSIONS` (ID: `29f46c6580a34c0e9af149901e0e1101`)
+
 ### GitHub Actions (CI/CD)
 
 | Workflow | Trigger | Accion |
 |----------|---------|--------|
 | `ci.yml` | Push/PR a main | Tests + typecheck |
+| `deploy-dev.yml` | Push a develop | Deploy automatico a dev |
 | `deploy-staging.yml` | Push a main | Deploy automatico a staging |
 | `deploy-production.yml` | Manual/Release | Deploy a produccion |
 
@@ -614,11 +620,14 @@ npm test -- test/unit/security.test.ts
 ### Deploy Manual
 
 ```bash
+# Dev
+wrangler deploy --env dev
+
 # Staging
 wrangler deploy --env staging
 
 # Production
-wrangler deploy
+wrangler deploy --env production
 ```
 
 ---
