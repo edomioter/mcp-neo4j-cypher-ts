@@ -303,8 +303,9 @@ function generateSchemaSummary(
   if (labels.length > 0) {
     lines.push('Node Labels:');
     for (const label of labels) {
-      const propCount = label.properties.length;
-      const relCount = label.outgoingRelationships.length + label.incomingRelationships.length;
+      // FIX: Use nullish coalescing to handle undefined arrays
+      const propCount = (label.properties ?? []).length;
+      const relCount = (label.outgoingRelationships ?? []).length + (label.incomingRelationships ?? []).length;
       lines.push(`  - ${label.name}: ${propCount} properties, ${relCount} relationships`);
     }
     lines.push('');
@@ -331,19 +332,22 @@ export function formatSchemaForLLM(schema: ProcessedSchema): string {
   sections.push('Detailed Schema:\n');
 
   // Node labels with properties
-  if (schema.labels.length > 0) {
+  // FIX: Use optional chaining to handle undefined arrays
+  const labels = schema.labels ?? [];
+  if (labels.length > 0) {
     sections.push('## Node Labels\n');
 
-    for (const label of schema.labels) {
+    for (const label of labels) {
       sections.push(`### ${label.name}`);
 
       if (label.count !== undefined) {
         sections.push(`Count: ~${label.count} nodes`);
       }
 
-      if (label.properties.length > 0) {
+      const properties = label.properties ?? [];
+      if (properties.length > 0) {
         sections.push('Properties:');
-        for (const prop of label.properties) {
+        for (const prop of properties) {
           let propLine = `  - ${prop.name}: ${prop.type}`;
           if (prop.indexed) propLine += ' [indexed]';
           if (prop.unique) propLine += ' [unique]';
@@ -351,16 +355,18 @@ export function formatSchemaForLLM(schema: ProcessedSchema): string {
         }
       }
 
-      if (label.outgoingRelationships.length > 0) {
+      const outgoingRels = label.outgoingRelationships ?? [];
+      if (outgoingRels.length > 0) {
         sections.push('Outgoing Relationships:');
-        for (const rel of label.outgoingRelationships) {
+        for (const rel of outgoingRels) {
           sections.push(`  - (${label.name})-[:${rel.type}]->(${rel.targetLabel})`);
         }
       }
 
-      if (label.incomingRelationships.length > 0) {
+      const incomingRels = label.incomingRelationships ?? [];
+      if (incomingRels.length > 0) {
         sections.push('Incoming Relationships:');
-        for (const rel of label.incomingRelationships) {
+        for (const rel of incomingRels) {
           sections.push(`  - (${rel.targetLabel})-[:${rel.type}]->(${label.name})`);
         }
       }
@@ -370,19 +376,22 @@ export function formatSchemaForLLM(schema: ProcessedSchema): string {
   }
 
   // Relationship types
-  if (schema.relationshipTypes.length > 0) {
+  // FIX: Use optional chaining to handle undefined arrays
+  const relationshipTypes = schema.relationshipTypes ?? [];
+  if (relationshipTypes.length > 0) {
     sections.push('## Relationship Types\n');
 
-    for (const relType of schema.relationshipTypes) {
+    for (const relType of relationshipTypes) {
       sections.push(`### ${relType.name}`);
 
       if (relType.count !== undefined) {
         sections.push(`Count: ~${relType.count} relationships`);
       }
 
-      if (relType.properties.length > 0) {
+      const relProperties = relType.properties ?? [];
+      if (relProperties.length > 0) {
         sections.push('Properties:');
-        for (const prop of relType.properties) {
+        for (const prop of relProperties) {
           sections.push(`  - ${prop.name}: ${prop.type}`);
         }
       }
