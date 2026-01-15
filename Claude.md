@@ -19,7 +19,7 @@ Usuario: "Muestrame 5 peliculas"
 Claude: [Usa read_neo4j_cypher] MATCH (m:Movie)... [Resultados]
 ```
 
-**URL Produccion:** `https://mcp-neo4j-cypher.ops-e1a.workers.dev`
+**URL Produccion:** Ver GitHub Environments o `wrangler.toml`
 
 ---
 
@@ -588,9 +588,9 @@ npm test -- test/unit/security.test.ts
 
 | Ambiente | Worker | Rama | URL |
 |----------|--------|------|-----|
-| Dev | `mcp-neo4j-cypher-dev` | `develop` | `https://mcp-neo4j-cypher-dev.ops-e1a.workers.dev` |
-| Staging | `mcp-neo4j-cypher-staging` | `main` | `https://mcp-neo4j-cypher-staging.ops-e1a.workers.dev` |
-| Produccion | `mcp-neo4j-cypher` | manual | `https://mcp-neo4j-cypher.ops-e1a.workers.dev` |
+| Dev | `mcp-neo4j-cypher-dev` | `develop` | `[DEV_URL]` |
+| Staging | `mcp-neo4j-cypher-staging` | `main` | `[STAGING_URL]` |
+| Produccion | `mcp-neo4j-cypher` | manual | `[PRODUCTION_URL]` |
 
 ### Recursos Cloudflare
 

@@ -28,4 +28,11 @@ Thumbs.db
 
 # Claude Code configuration
 .claude/
+.mcp.json
+
+# Scripts con configuración local
+scripts/
+
+# Logs descargados
+logs-*.json
 nul
